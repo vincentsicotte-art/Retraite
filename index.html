@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulateur de décaissement à la retraite</title>
+  <style>
+    :root {
+      --bg: #f3f7fb;
+      --panel: #ffffff;
+      --text: #16324f;
+      --muted: #5a7184;
+      --accent: #2678ff;
+      --accent-soft: rgba(38, 120, 255, 0.14);
+      --success: #169b62;
+      --warning: #f59e0b;
+      --danger: #dc2626;
+      --border: #d8e1eb;
+      --shadow: 0 22px 50px rgba(17, 42, 78, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(38, 120, 255, 0.13), transparent 28%),
+        linear-gradient(180deg, #eef5fb 0%, #f8fbfd 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .container {
+      width: min(1200px, calc(100% - 32px));
+      margin: 32px auto 48px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .hero, .panel {
+      background: var(--panel);
+      border: 1px solid rgba(216, 225, 235, 0.85);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.3rem);
+      line-height: 1.05;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .pill {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .hero-card {
+      padding: 18px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, #f9fbff 0%, #eef5ff 100%);
+      border: 1px solid rgba(38, 120, 255, 0.18);
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero-card strong {
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .hero-card .big {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+    }
+
+    .hero-card small {
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .controls {
+      padding: 24px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    label span {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 1rem;
+      color: var(--text);
+      background: #fff;
+    }
+
+    .slider-wrap {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border-radius: 18px;
+      background: #f7fafc;
+      border: 1px solid var(--border);
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .slider-value {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .slider-scale {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .stat {
+      padding: 18px;
+      border-radius: 18px;
+      background: #fff;
+      border: 1px solid var(--border);
+    }
+
+    .stat .label {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-bottom: 8px;
+    }
+
+    .stat .value {
+      font-size: 1.65rem;
+      font-weight: 800;
+    }
+
+    .stat.good .value { color: var(--success); }
+    .stat.warn .value { color: var(--warning); }
+    .stat.bad .value { color: var(--danger); }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+    }
+
+    .panel {
+      padding: 22px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 1.35rem;
+    }
+
+    .panel p.note {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .chart {
+      display: grid;
+      gap: 10px;
+      max-height: 720px;
+      overflow: auto;
+      padding-right: 6px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 86px 1fr 112px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .bar-label {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .bar-track {
+      position: relative;
+      height: 20px;
+      border-radius: 999px;
+      background: #ecf2f8;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      border-radius: 999px;
+      min-width: 2px;
+      background: linear-gradient(90deg, #1fa971, #82d9a8);
+    }
+
+    .bar-value {
+      text-align: right;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.95rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.93rem;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #ebf1f6;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child, td:first-child,
+    th:nth-child(2), td:nth-child(2) {
+      text-align: left;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 1;
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tbody tr:hover {
+      background: #f8fbff;
+    }
+
+    .table-wrap {
+      max-height: 720px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      margin-bottom: 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .content-grid,
+      .controls-grid,
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <div>
+        <h1>Simulateur visuel de décaissement à la retraite</h1>
+        <p>
+          Entrez votre capital initial, votre rendement annuel, votre inflation et ajustez le retrait annuel.
+          L'outil projette l'évolution du portefeuille de 60 à 95 ans en tenant compte des rentrées RRQ et PSV
+          visibles dans votre tableau.
+        </p>
+        <div class="pill-row">
+          <div class="pill">Départ à 60 ans</div>
+          <div class="pill">Rendement par défaut: 6,5%</div>
+          <div class="pill">Retraits de 30 000$ à 70 000$</div>
+        </div>
+      </div>
+      <div class="hero-card">
+        <strong>Capital estimé à 95 ans</strong>
+        <div id="headlineBalance" class="big">0 $</div>
+        <small id="headlineText">
+          Ajustez les paramètres pour voir si le capital tient jusqu'à 95 ans.
+        </small>
+      </div>
+    </section>
+
+    <section class="panel controls">
+      <div class="controls-grid">
+        <label>
+          <span>Capital de départ ($)</span>
+          <input id="startingCapital" type="number" min="0" step="10000" value="1000000" />
+        </label>
+        <label>
+          <span>Rendement annuel (%)</span>
+          <input id="annualReturn" type="number" min="0" max="20" step="0.1" value="6.5" />
+        </label>
+        <label>
+          <span>Inflation annuelle (%)</span>
+          <input id="inflation" type="number" min="0" max="10" step="0.1" value="2.5" />
+        </label>
+        <label>
+          <span>Âge de départ</span>
+          <input type="number" value="60" disabled />
+        </label>
+      </div>
+
+      <div class="slider-wrap">
+        <div class="slider-header">
+          <div>
+            <strong>Retrait annuel brut visé</strong>
+            <div class="footer-note">Le retrait est indexé selon l'inflation chaque année.</div>
+          </div>
+          <div id="withdrawalValue" class="slider-value">50 000 $</div>
+        </div>
+        <input id="withdrawalSlider" type="range" min="30000" max="70000" step="1000" value="50000" />
+        <div class="slider-scale">
+          <span>30 000 $</span>
+          <span>70 000 $</span>
+        </div>
+      </div>
+
+      <div class="summary-grid">
+        <div class="stat">
+          <div class="label">Solde à 90 ans</div>
+          <div class="value" id="balance90">0 $</div>
+        </div>
+        <div class="stat">
+          <div class="label">Solde à 95 ans</div>
+          <div class="value" id="balance95">0 $</div>
+        </div>
+        <div class="stat">
+          <div class="label">Âge d'épuisement</div>
+          <div class="value" id="depletionAge">Aucun</div>
+        </div>
+        <div class="stat">
+          <div class="label">Rentrées cumulées RRQ + PSV</div>
+          <div class="value" id="benefitsTotal">0 $</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-grid">
+      <section class="panel">
+        <h2>Capital restant jusqu'à 95 ans</h2>
+        <p class="note">
+          Couleurs: vert = confortable, orange = zone prudente, rouge = portefeuille presque épuisé ou épuisé.
+        </p>
+        <div class="legend">
+          <span><i class="dot" style="background:#1fa971"></i> plus de 50% du capital initial</span>
+          <span><i class="dot" style="background:#f59e0b"></i> entre 15% et 50%</span>
+          <span><i class="dot" style="background:#dc2626"></i> moins de 15% ou 0</span>
+        </div>
+        <div id="chart" class="chart"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Entrées et sorties annuelles</h2>
+        <p class="note">
+          RRQ et PSV sont saisis selon le tableau fourni pour les âges 65 à 89. À partir de 90 ans,
+          le simulateur prolonge les montants de 89 ans en les indexant avec l'inflation entrée.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Âge</th>
+                <th>Année</th>
+                <th>Solde début</th>
+                <th>Rendement</th>
+                <th>RRQ</th>
+                <th>PSV</th>
+                <th>Retrait</th>
+                <th>Solde fin</th>
+              </tr>
+            </thead>
+            <tbody id="cashflowBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <script>
+    const START_YEAR = 2026;
+    const START_AGE = 60;
+    const END_AGE = 95;
+
+    const rrqPsvByAge = {
+      60: { rrq: 0, psv: 0 },
+      61: { rrq: 0, psv: 0 },
+      62: { rrq: 0, psv: 0 },
+      63: { rrq: 0, psv: 0 },
+      64: { rrq: 0, psv: 0 },
+      65: { rrq: 9984, psv: 7741 },
+      66: { rrq: 13054, psv: 10126 },
+      67: { rrq: 13380, psv: 10380 },
+      68: { rrq: 13714, psv: 10639 },
+      69: { rrq: 14057, psv: 10905 },
+      70: { rrq: 14409, psv: 11178 },
+      71: { rrq: 14769, psv: 11457 },
+      72: { rrq: 15138, psv: 11744 },
+      73: { rrq: 15517, psv: 12037 },
+      74: { rrq: 15904, psv: 12338 },
+      75: { rrq: 16302, psv: 12641 },
+      76: { rrq: 16710, psv: 12459 },
+      77: { rrq: 17127, psv: 14166 },
+      78: { rrq: 17556, psv: 14981 },
+      79: { rrq: 17994, psv: 15355 },
+      80: { rrq: 18444, psv: 15739 },
+      81: { rrq: 18905, psv: 16133 },
+      82: { rrq: 19378, psv: 16536 },
+      83: { rrq: 19862, psv: 16950 },
+      84: { rrq: 20359, psv: 17373 },
+      85: { rrq: 20868, psv: 17808 },
+      86: { rrq: 21390, psv: 18252 },
+      87: { rrq: 21924, psv: 18709 },
+      88: { rrq: 22473, psv: 19176 },
+      89: { rrq: 23034, psv: 19656 }
+    };
+
+    const startingCapitalInput = document.getElementById('startingCapital');
+    const annualReturnInput = document.getElementById('annualReturn');
+    const inflationInput = document.getElementById('inflation');
+    const withdrawalSlider = document.getElementById('withdrawalSlider');
+    const withdrawalValue = document.getElementById('withdrawalValue');
+    const chart = document.getElementById('chart');
+    const cashflowBody = document.getElementById('cashflowBody');
+    const balance90 = document.getElementById('balance90');
+    const balance95 = document.getElementById('balance95');
+    const depletionAge = document.getElementById('depletionAge');
+    const benefitsTotal = document.getElementById('benefitsTotal');
+    const headlineBalance = document.getElementById('headlineBalance');
+    const headlineText = document.getElementById('headlineText');
+
+    const currency = new Intl.NumberFormat('fr-CA', {
+      style: 'currency',
+      currency: 'CAD',
+      maximumFractionDigits: 0
+    });
+
+    function formatMoney(value) {
+      return currency.format(Math.round(value));
+    }
+
+    function getBenefitsForAge(age, inflationRate) {
+      if (rrqPsvByAge[age]) {
+        return rrqPsvByAge[age];
+      }
+
+      const base = rrqPsvByAge[89];
+      const extraYears = age - 89;
+      const factor = Math.pow(1 + inflationRate, extraYears);
+      return {
+        rrq: base.rrq * factor,
+        psv: base.psv * factor
+      };
+    }
+
+    function getBarColor(endingBalance, startingCapital) {
+      if (endingBalance <= startingCapital * 0.15) {
+        return 'linear-gradient(90deg, #dc2626, #f87171)';
+      }
+      if (endingBalance <= startingCapital * 0.5) {
+        return 'linear-gradient(90deg, #f59e0b, #facc15)';
+      }
+      return 'linear-gradient(90deg, #1fa971, #82d9a8)';
+    }
+
+    function simulate() {
+      const startingCapital = Math.max(0, Number(startingCapitalInput.value) || 0);
+      const annualReturn = Math.max(0, Number(annualReturnInput.value) || 0) / 100;
+      const inflation = Math.max(0, Number(inflationInput.value) || 0) / 100;
+      const baseWithdrawal = Number(withdrawalSlider.value);
+      withdrawalValue.textContent = formatMoney(baseWithdrawal);
+
+      let balance = startingCapital;
+      let depletedAt = null;
+      let totalBenefits = 0;
+      const rows = [];
+
+      for (let age = START_AGE; age <= END_AGE; age += 1) {
+        const year = START_YEAR + (age - START_AGE);
+        const inflationFactor = Math.pow(1 + inflation, age - START_AGE);
+        const withdrawal = baseWithdrawal * inflationFactor;
+        const startBalance = balance;
+        const growth = startBalance * annualReturn;
+        const benefits = getBenefitsForAge(age, inflation);
+        const totalInflow = benefits.rrq + benefits.psv;
+        const endBalance = Math.max(0, startBalance + growth + totalInflow - withdrawal);
+
+        totalBenefits += totalInflow;
+        if (endBalance === 0 && depletedAt === null) {
+          depletedAt = age;
+        }
+
+        rows.push({
+          age,
+          year,
+          startBalance,
+          growth,
+          rrq: benefits.rrq,
+          psv: benefits.psv,
+          withdrawal,
+          endBalance
+        });
+
+        balance = endBalance;
+      }
+
+      renderSummary(rows, startingCapital, totalBenefits, depletedAt);
+      renderChart(rows, startingCapital);
+      renderTable(rows);
+    }
+
+    function renderSummary(rows, startingCapital, totalBenefitsValue, depletedAt) {
+      const age90 = rows.find((row) => row.age === 90);
+      const age95 = rows.find((row) => row.age === 95);
+      balance90.textContent = formatMoney(age90 ? age90.endBalance : 0);
+      balance95.textContent = formatMoney(age95 ? age95.endBalance : 0);
+      depletionAge.textContent = depletedAt ? `${depletedAt} ans` : 'Aucun';
+      benefitsTotal.textContent = formatMoney(totalBenefitsValue);
+      headlineBalance.textContent = formatMoney(age95 ? age95.endBalance : 0);
+
+      const finalBalance = age95 ? age95.endBalance : 0;
+      if (finalBalance <= 0) {
+        headlineText.textContent = 'Le capital est entièrement épuisé avant ou à 95 ans avec ce niveau de retrait.';
+      } else if (finalBalance < startingCapital * 0.25) {
+        headlineText.textContent = 'Le capital tient jusqu\'à 95 ans, mais avec une marge de sécurité réduite.';
+      } else {
+        headlineText.textContent = 'Le capital reste positif jusqu\'à 95 ans avec une réserve encore confortable.';
+      }
+
+      document.querySelectorAll('.summary-grid .stat').forEach((card, index) => {
+        card.classList.remove('good', 'warn', 'bad');
+        if (index < 2) {
+          const value = index === 0 ? (age90 ? age90.endBalance : 0) : (age95 ? age95.endBalance : 0);
+          if (value <= 0) card.classList.add('bad');
+          else if (value < startingCapital * 0.25) card.classList.add('warn');
+          else card.classList.add('good');
+        }
+      });
+    }
+
+    function renderChart(rows, startingCapital) {
+      const maxBalance = Math.max(startingCapital, ...rows.map((row) => row.endBalance), 1);
+      chart.innerHTML = rows.map((row) => {
+        const width = Math.max(0, (row.endBalance / maxBalance) * 100);
+        return `
+          <div class="bar-row">
+            <div class="bar-label">${row.age} ans</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${width}%;background:${getBarColor(row.endBalance, startingCapital)}"></div>
+            </div>
+            <div class="bar-value">${formatMoney(row.endBalance)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderTable(rows) {
+      cashflowBody.innerHTML = rows.map((row) => `
+        <tr>
+          <td>${row.age} ans</td>
+          <td>${row.year}</td>
+          <td>${formatMoney(row.startBalance)}</td>
+          <td>${formatMoney(row.growth)}</td>
+          <td>${formatMoney(row.rrq)}</td>
+          <td>${formatMoney(row.psv)}</td>
+          <td>${formatMoney(row.withdrawal)}</td>
+          <td>${formatMoney(row.endBalance)}</td>
+        </tr>
+      `).join('');
+    }
+
+    [startingCapitalInput, annualReturnInput, inflationInput, withdrawalSlider].forEach((element) => {
+      element.addEventListener('input', simulate);
+    });
+
+    simulate();
+  </script>
+</body>
+</html>
