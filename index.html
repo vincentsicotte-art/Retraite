@@ -872,11 +872,13 @@
 
         if (mode === 'optimized') {
           const oasThreshold = getOasThresholdForYear(yearOffset, inputs.inflation);
-          const taxableTarget = age >= 65
-            ? Math.min(QUEBEC_FIRST_BRACKET, oasThreshold - 5000)
-            : QUEBEC_FIRST_BRACKET;
-          const desiredRegistered = Math.max(0, taxableTarget - benefitsTotal);
-          registeredWithdrawal = Math.min(registeredAfterGrowth, Math.max(minimumRrif, desiredRegistered));
+          const firstBracketMarginalRate = marginalRateForQuebec(QUEBEC_FIRST_BRACKET);
+          const portfolioNeedNet = Math.max(0, spendingNeed - benefitsTotal);
+          const grossedUpPortfolioNeed = portfolioNeedNet / Math.max(0.2, 1 - firstBracketMarginalRate);
+          const registeredTarget = age >= 65
+            ? Math.min(grossedUpPortfolioNeed, Math.max(0, oasThreshold - 5000 - benefitsTotal))
+            : Math.min(grossedUpPortfolioNeed, QUEBEC_FIRST_BRACKET);
+          registeredWithdrawal = Math.min(registeredAfterGrowth, Math.max(minimumRrif, registeredTarget));
         }
 
         registeredWithdrawal = clamp(registeredWithdrawal, 0, registeredAfterGrowth);
@@ -1012,7 +1014,7 @@
       points.push(`<h3>${best.label}</h3>`);
       points.push(`<div class="muted">Cette recommandation est la meilleure parmi les scénarios comparés pour vos paramètres actuels.</div>`);
       points.push('<ul>' + [
-        `La simulation vise à lisser le revenu imposable autour de la 1re tranche québécoise (environ ${firstBracketTarget}) avant que les retraits minimums du FERR ne forcent des sorties plus élevées.`,
+        `La simulation part d'un besoin net, le grossit fiscalement, puis compare cette cible au plafond de la 1re tranche québécoise (environ ${firstBracketTarget}) et au seuil de récupération de la PSV.`,
         `À partir de 65 ans, l'algorithme surveille aussi le seuil estimé de récupération de la PSV. Pour votre horizon, il tourne autour de ${avgThreshold65} à 65 ans après indexation simulée.`,
         `Si le REER reste trop gros jusqu'à 72 ans, les minimums FERR peuvent pousser le revenu imposable vers le haut. La stratégie optimisée réduit cette pression plus tôt lorsque cela semble rentable.`,
         `Avec vos chiffres, cette stratégie laisse ${money(best.net95)} à 95 ans, soit ${money(Math.max(0, savingsVsWorst))} de plus que la moins bonne stratégie simulée.`,
