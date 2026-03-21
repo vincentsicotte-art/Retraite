@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulateur fiscal de décaissement retraite</title>
+  <style>
+    :root {
+      --bg: #eef4fb;
+      --panel: #ffffff;
+      --text: #14324d;
+      --muted: #5a7184;
+      --border: #d8e1eb;
+      --accent: #2563eb;
+      --accent-soft: rgba(37, 99, 235, 0.12);
+      --success: #0f9d68;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --shadow: 0 22px 50px rgba(20, 50, 77, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.15), transparent 26%),
+        linear-gradient(180deg, #eef4fb 0%, #f8fbfd 100%);
+    }
+
+    .container {
+      width: min(1320px, calc(100% - 32px));
+      margin: 28px auto 44px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .panel,
+    .hero {
+      background: var(--panel);
+      border: 1px solid rgba(216, 225, 235, 0.92);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px;
+      display: grid;
+      grid-template-columns: 1.3fr 0.9fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.35rem);
+      line-height: 1.04;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.65;
+      font-size: 1.04rem;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 0.92rem;
+    }
+
+    .hero-card {
+      padding: 20px;
+      border-radius: 22px;
+      border: 1px solid rgba(37, 99, 235, 0.2);
+      background: linear-gradient(180deg, #f9fbff 0%, #eef5ff 100%);
+      display: grid;
+      gap: 14px;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 800;
+      font-size: 0.82rem;
+    }
+
+    .hero-card .big {
+      font-size: clamp(1.9rem, 5vw, 3rem);
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .hero-card small,
+    .muted {
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .panel {
+      padding: 22px;
+    }
+
+    .controls-grid,
+    .summary-grid,
+    .comparison-grid,
+    .detail-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .controls-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .summary-grid,
+    .comparison-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .detail-grid {
+      grid-template-columns: 1.15fr 0.85fr;
+    }
+
+    label span {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 800;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      font-size: 1rem;
+      color: var(--text);
+      background: #fff;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .slider-wrap {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: #f7fafc;
+      display: grid;
+      gap: 12px;
+    }
+
+    .slider-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .slider-value {
+      font-weight: 900;
+      font-size: 1.7rem;
+      color: var(--accent);
+    }
+
+    .slider-scale {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      background: #fff;
+    }
+
+    .card .label {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-bottom: 8px;
+    }
+
+    .card .value {
+      font-size: 1.56rem;
+      font-weight: 900;
+      line-height: 1.08;
+    }
+
+    .card.good .value { color: var(--success); }
+    .card.warn .value { color: var(--warning); }
+    .card.bad .value { color: var(--danger); }
+
+    .strategy-card {
+      position: relative;
+      padding-top: 42px;
+    }
+
+    .badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      background: #edf2f7;
+      color: var(--muted);
+    }
+
+    .badge.best {
+      background: rgba(15, 157, 104, 0.12);
+      color: var(--success);
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1.38rem;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 1.06rem;
+    }
+
+    p.note {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .explanation {
+      padding: 18px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #fcfdff 0%, #f5f9ff 100%);
+      border: 1px solid rgba(37, 99, 235, 0.16);
+      display: grid;
+      gap: 10px;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    li { margin-bottom: 8px; }
+
+    .chart {
+      display: grid;
+      gap: 10px;
+      max-height: 760px;
+      overflow: auto;
+      padding-right: 6px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 96px 1fr 130px;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .bar-label {
+      font-weight: 800;
+      font-size: 0.95rem;
+    }
+
+    .bar-track {
+      height: 20px;
+      border-radius: 999px;
+      background: #ecf2f8;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      border-radius: 999px;
+      min-width: 2px;
+      background: linear-gradient(90deg, #16a34a, #86efac);
+    }
+
+    .bar-value {
+      text-align: right;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.95rem;
+    }
+
+    .table-wrap {
+      max-height: 760px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.91rem;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #eaf1f6;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child, td:first-child,
+    th:nth-child(2), td:nth-child(2) {
+      text-align: left;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 1;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.8rem;
+    }
+
+    tbody tr:hover {
+      background: #f8fbff;
+    }
+
+    .footer-note {
+      font-size: 0.89rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-top: 16px;
+    }
+
+    @media (max-width: 1100px) {
+      .hero,
+      .detail-grid,
+      .controls-grid,
+      .summary-grid,
+      .comparison-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <div>
+        <h1>Simulateur de décaissement retraite avec stratégie fiscale</h1>
+        <p>
+          Entrez séparément votre capital enregistré et votre capital non enregistré. L'outil compare trois méthodes
+          de décaissement et suggère la stratégie la plus favorable fiscalement pour un résident du Québec,
+          en tenant compte des règles canadiennes en vigueur sur les REER/FERR, des retraits minimums du FERR,
+          des rentes RRQ/PSV et d'une estimation d'impôt Québec + fédéral.
+        </p>
+        <div class="chips">
+          <div class="chip">Départ fixe à 60 ans</div>
+          <div class="chip">REER → FERR au plus tard à 71 ans</div>
+          <div class="chip">Retraits minimums FERR dès 72 ans</div>
+          <div class="chip">Seuil PSV surveillé</div>
+        </div>
+      </div>
+      <div class="hero-card">
+        <div class="eyebrow">Stratégie suggérée</div>
+        <div id="bestStrategyHeadline" class="big">—</div>
+        <small id="bestStrategySummary">
+          Ajustez les paramètres pour voir quelle séquence de décaissement semble la plus efficiente après impôt.
+        </small>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Paramètres du scénario</h2>
+      <p class="note">
+        Le simulateur suppose un profil québécois, car votre tableau utilise la RRQ. Le capital non enregistré inclut
+        un paramètre facultatif de coût de base fiscal afin d'estimer la portion en gain en capital lors des retraits.
+      </p>
+      <div class="controls-grid">
+        <label>
+          <span>Capital enregistré ($)</span>
+          <input id="registeredCapital" type="number" min="0" step="10000" value="700000" />
+        </label>
+        <label>
+          <span>Capital non enregistré ($)</span>
+          <input id="nonRegisteredCapital" type="number" min="0" step="10000" value="500000" />
+        </label>
+        <label>
+          <span>Coût de base du non enregistré (%)</span>
+          <input id="acbRatio" type="number" min="0" max="100" step="1" value="70" />
+        </label>
+        <label>
+          <span>Rendement annuel (%)</span>
+          <input id="annualReturn" type="number" min="0" max="20" step="0.1" value="6.5" />
+        </label>
+        <label>
+          <span>Inflation annuelle (%)</span>
+          <input id="inflation" type="number" min="0" max="10" step="0.1" value="2.5" />
+        </label>
+      </div>
+
+      <div class="slider-wrap">
+        <div class="slider-header">
+          <div>
+            <strong>Besoin annuel brut avant impôt</strong>
+            <div class="muted">Le besoin est indexé selon l'inflation. L'impôt est calculé séparément et réduit les soldes de fin d'année.</div>
+          </div>
+          <div id="withdrawalValue" class="slider-value">50 000 $</div>
+        </div>
+        <input id="withdrawalSlider" type="range" min="30000" max="70000" step="1000" value="50000" />
+        <div class="slider-scale">
+          <span>30 000 $</span>
+          <span>70 000 $</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Résumé de la meilleure stratégie simulée</h2>
+      <div class="summary-grid">
+        <div class="card">
+          <div class="label">Valeur nette estimée à 90 ans</div>
+          <div class="value" id="bestNet90">0 $</div>
+        </div>
+        <div class="card">
+          <div class="label">Valeur nette estimée à 95 ans</div>
+          <div class="value" id="bestNet95">0 $</div>
+        </div>
+        <div class="card">
+          <div class="label">Impôt cumulé estimé</div>
+          <div class="value" id="bestTaxes">0 $</div>
+        </div>
+        <div class="card">
+          <div class="label">1er âge d'épuisement</div>
+          <div class="value" id="bestDepletion">Aucun</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Comparaison des stratégies</h2>
+      <p class="note">
+        La stratégie recommandée est celle qui laisse la plus grande valeur nette estimée à 95 ans après l'impôt simulé.
+        Si deux scénarios sont très proches, le simulateur privilégie celui avec le moins d'impôt cumulé.
+      </p>
+      <div id="strategyCards" class="comparison-grid"></div>
+    </section>
+
+    <section class="detail-grid">
+      <section class="panel">
+        <h2>Pourquoi cette stratégie est suggérée</h2>
+        <div id="strategyExplanation" class="explanation"></div>
+        <div class="footer-note">
+          Règles utilisées dans ce simulateur: REER à convertir au plus tard à 71 ans; minimum FERR selon les facteurs CRA;
+          estimation du seuil de récupération de la PSV indexée; impôt combiné Québec + fédéral avec abattement fédéral du Québec;
+          gains du non enregistré estimés avec un taux d'inclusion de 50% sur la portion réalisée.
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Capital restant de la stratégie retenue</h2>
+        <p class="note">
+          Le graphique montre la valeur nette estimée par année pour la stratégie retenue. Vert = confortable, orange = prudent,
+          rouge = très serré ou épuisé.
+        </p>
+        <div id="chart" class="chart"></div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <h2>Entrées et sorties annuelles — stratégie retenue</h2>
+      <p class="note">
+        Le tableau liste le besoin annuel brut, les rentes publiques, les retraits depuis l'enregistré et le non enregistré,
+        le revenu imposable estimé, l'impôt estimé et les soldes de fin d'année.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Âge</th>
+              <th>Année</th>
+              <th>Besoin brut</th>
+              <th>RRQ</th>
+              <th>PSV</th>
+              <th>Retrait enr.</th>
+              <th>Retrait non enr.</th>
+              <th>Gain imposable</th>
+              <th>Revenu imposable</th>
+              <th>Impôt</th>
+              <th>Fin enr.</th>
+              <th>Fin non enr.</th>
+              <th>Total net</th>
+            </tr>
+          </thead>
+          <tbody id="cashflowBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const START_YEAR = 2026;
+    const START_AGE = 60;
+    const END_AGE = 95;
+    const QUEBEC_FIRST_BRACKET = 54345;
+    const OAS_THRESHOLD_2026 = 95323;
+    const OAS_RECOVERY_RATE = 0.15;
+    const CAPITAL_GAINS_INCLUSION_RATE = 0.5;
+
+    const federalBrackets2026 = [
+      { upTo: 58523, rate: 0.14 },
+      { upTo: 117045, rate: 0.205 },
+      { upTo: 181440, rate: 0.26 },
+      { upTo: 258482, rate: 0.29 },
+      { upTo: Infinity, rate: 0.33 }
+    ];
+
+    const quebecBrackets2026 = [
+      { upTo: 54345, rate: 0.14 },
+      { upTo: 108680, rate: 0.19 },
+      { upTo: 132245, rate: 0.24 },
+      { upTo: Infinity, rate: 0.2575 }
+    ];
+
+    const rrqPsvByAge = {
+      60: { rrq: 0, psv: 0 },
+      61: { rrq: 0, psv: 0 },
+      62: { rrq: 0, psv: 0 },
+      63: { rrq: 0, psv: 0 },
+      64: { rrq: 0, psv: 0 },
+      65: { rrq: 9984, psv: 7741 },
+      66: { rrq: 13054, psv: 10126 },
+      67: { rrq: 13380, psv: 10380 },
+      68: { rrq: 13714, psv: 10639 },
+      69: { rrq: 14057, psv: 10905 },
+      70: { rrq: 14409, psv: 11178 },
+      71: { rrq: 14769, psv: 11457 },
+      72: { rrq: 15138, psv: 11744 },
+      73: { rrq: 15517, psv: 12037 },
+      74: { rrq: 15904, psv: 12338 },
+      75: { rrq: 16302, psv: 12641 },
+      76: { rrq: 16710, psv: 12459 },
+      77: { rrq: 17127, psv: 14166 },
+      78: { rrq: 17556, psv: 14981 },
+      79: { rrq: 17994, psv: 15355 },
+      80: { rrq: 18444, psv: 15739 },
+      81: { rrq: 18905, psv: 16133 },
+      82: { rrq: 19378, psv: 16536 },
+      83: { rrq: 19862, psv: 16950 },
+      84: { rrq: 20359, psv: 17373 },
+      85: { rrq: 20868, psv: 17808 },
+      86: { rrq: 21390, psv: 18252 },
+      87: { rrq: 21924, psv: 18709 },
+      88: { rrq: 22473, psv: 19176 },
+      89: { rrq: 23034, psv: 19656 }
+    };
+
+    const rrifFactors = {
+      71: 0.0528,
+      72: 0.0540,
+      73: 0.0553,
+      74: 0.0567,
+      75: 0.0582,
+      76: 0.0598,
+      77: 0.0617,
+      78: 0.0636,
+      79: 0.0658,
+      80: 0.0682,
+      81: 0.0708,
+      82: 0.0738,
+      83: 0.0771,
+      84: 0.0808,
+      85: 0.0851,
+      86: 0.0899,
+      87: 0.0955,
+      88: 0.1021,
+      89: 0.1099,
+      90: 0.1192,
+      91: 0.1306,
+      92: 0.1449,
+      93: 0.1634,
+      94: 0.1879,
+      95: 0.2
+    };
+
+    const ids = {
+      registeredCapital: document.getElementById('registeredCapital'),
+      nonRegisteredCapital: document.getElementById('nonRegisteredCapital'),
+      acbRatio: document.getElementById('acbRatio'),
+      annualReturn: document.getElementById('annualReturn'),
+      inflation: document.getElementById('inflation'),
+      withdrawalSlider: document.getElementById('withdrawalSlider'),
+      withdrawalValue: document.getElementById('withdrawalValue'),
+      bestStrategyHeadline: document.getElementById('bestStrategyHeadline'),
+      bestStrategySummary: document.getElementById('bestStrategySummary'),
+      bestNet90: document.getElementById('bestNet90'),
+      bestNet95: document.getElementById('bestNet95'),
+      bestTaxes: document.getElementById('bestTaxes'),
+      bestDepletion: document.getElementById('bestDepletion'),
+      strategyCards: document.getElementById('strategyCards'),
+      strategyExplanation: document.getElementById('strategyExplanation'),
+      chart: document.getElementById('chart'),
+      cashflowBody: document.getElementById('cashflowBody')
+    };
+
+    const currency = new Intl.NumberFormat('fr-CA', {
+      style: 'currency',
+      currency: 'CAD',
+      maximumFractionDigits: 0
+    });
+
+    function money(value) {
+      return currency.format(Math.round(value));
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function progressiveTax(income, brackets) {
+      let tax = 0;
+      let lower = 0;
+      let remaining = income;
+
+      for (const bracket of brackets) {
+        if (remaining <= 0) break;
+        const upper = bracket.upTo;
+        const slice = Math.min(remaining, upper - lower);
+        if (slice > 0) {
+          tax += slice * bracket.rate;
+          remaining -= slice;
+          lower = upper;
+        }
+      }
+
+      return tax;
+    }
+
+    function federalBasicPersonalAmount(income) {
+      const maxAmount = 16452;
+      const minAmount = 14829;
+      const phaseStart = 181440;
+      const phaseEnd = 258482;
+
+      if (income <= phaseStart) return maxAmount;
+      if (income >= phaseEnd) return minAmount;
+
+      const ratio = (income - phaseStart) / (phaseEnd - phaseStart);
+      return maxAmount - (maxAmount - minAmount) * ratio;
+    }
+
+    function combinedTaxForQuebec(taxableIncome) {
+      if (taxableIncome <= 0) return 0;
+
+      const federalGross = progressiveTax(taxableIncome, federalBrackets2026);
+      const federalAfterAbatement = federalGross * (1 - 0.165);
+      const federalCredit = federalBasicPersonalAmount(taxableIncome) * 0.14;
+      const quebecGross = progressiveTax(taxableIncome, quebecBrackets2026);
+      const quebecCredit = 18952 * 0.14;
+
+      return Math.max(0, federalAfterAbatement - federalCredit) + Math.max(0, quebecGross - quebecCredit);
+    }
+
+    function marginalRateForQuebec(taxableIncome) {
+      const fedRate = federalBrackets2026.find((item) => taxableIncome <= item.upTo)?.rate ?? 0.33;
+      const qcRate = quebecBrackets2026.find((item) => taxableIncome <= item.upTo)?.rate ?? 0.2575;
+      return (fedRate * (1 - 0.165)) + qcRate;
+    }
+
+    function getBenefitsForAge(age, inflationRate) {
+      if (rrqPsvByAge[age]) return rrqPsvByAge[age];
+      const factor = Math.pow(1 + inflationRate, age - 89);
+      return {
+        rrq: rrqPsvByAge[89].rrq * factor,
+        psv: rrqPsvByAge[89].psv * factor
+      };
+    }
+
+    function getOasThresholdForYear(yearOffset, inflationRate) {
+      return OAS_THRESHOLD_2026 * Math.pow(1 + inflationRate, yearOffset);
+    }
+
+    function getRrifMinimum(age, registeredBalance) {
+      if (age < 72) return 0;
+      const factor = rrifFactors[age] ?? 0.2;
+      return registeredBalance * factor;
+    }
+
+    function getChartColor(netBalance, startingTotal) {
+      if (netBalance <= startingTotal * 0.15) return 'linear-gradient(90deg, #dc2626, #f87171)';
+      if (netBalance <= startingTotal * 0.5) return 'linear-gradient(90deg, #d97706, #facc15)';
+      return 'linear-gradient(90deg, #16a34a, #86efac)';
+    }
+
+    function evaluatePlan({
+      age,
+      yearOffset,
+      inputs,
+      benefits,
+      spendingNeed,
+      registeredAfterGrowth,
+      nonRegisteredAfterGrowth,
+      nonRegisteredAcb,
+      registeredWithdrawal,
+      nonRegisteredWithdrawal
+    }) {
+      const gainRatio = nonRegisteredAfterGrowth > 0
+        ? clamp((nonRegisteredAfterGrowth - nonRegisteredAcb) / nonRegisteredAfterGrowth, 0, 1)
+        : 0;
+      const realizedGain = nonRegisteredWithdrawal * gainRatio;
+      const taxableCapitalGain = realizedGain * CAPITAL_GAINS_INCLUSION_RATE;
+      const taxableIncome = benefits.rrq + benefits.psv + registeredWithdrawal + taxableCapitalGain;
+      const incomeTax = combinedTaxForQuebec(taxableIncome);
+      const oasThresholdForYear = getOasThresholdForYear(yearOffset, inputs.inflation);
+      const oasRecovery = age >= 65
+        ? Math.min(benefits.psv, Math.max(0, taxableIncome - oasThresholdForYear) * OAS_RECOVERY_RATE)
+        : 0;
+      const totalTax = incomeTax + oasRecovery;
+      const grossCash = benefits.rrq + benefits.psv + registeredWithdrawal + nonRegisteredWithdrawal;
+      const afterTaxCash = grossCash - totalTax;
+      const leftoverAfterSpending = Math.max(0, grossCash - spendingNeed);
+      const reinvestment = Math.max(0, leftoverAfterSpending - totalTax);
+      const taxFundingGap = Math.max(0, totalTax - leftoverAfterSpending);
+      const shortfall = Math.max(0, spendingNeed - grossCash);
+
+      return {
+        gainRatio,
+        realizedGain,
+        taxableCapitalGain,
+        taxableIncome,
+        incomeTax,
+        oasThresholdForYear,
+        oasRecovery,
+        totalTax,
+        grossCash,
+        afterTaxCash,
+        leftoverAfterSpending,
+        reinvestment,
+        taxFundingGap,
+        shortfall
+      };
+    }
+
+    function solveAdditionalWithdrawal({
+      source,
+      room,
+      age,
+      yearOffset,
+      inputs,
+      benefits,
+      spendingNeed,
+      registeredAfterGrowth,
+      nonRegisteredAfterGrowth,
+      nonRegisteredAcb,
+      registeredWithdrawal,
+      nonRegisteredWithdrawal
+    }) {
+      if (room <= 0) {
+        return {
+          registeredWithdrawal,
+          nonRegisteredWithdrawal,
+          plan: evaluatePlan({
+            age,
+            yearOffset,
+            inputs,
+            benefits,
+            spendingNeed,
+            registeredAfterGrowth,
+            nonRegisteredAfterGrowth,
+            nonRegisteredAcb,
+            registeredWithdrawal,
+            nonRegisteredWithdrawal
+          })
+        };
+      }
+
+      const applyAddition = (addition) => {
+        const nextRegistered = source === 'registered'
+          ? registeredWithdrawal + addition
+          : registeredWithdrawal;
+        const nextNonRegistered = source === 'nonRegistered'
+          ? nonRegisteredWithdrawal + addition
+          : nonRegisteredWithdrawal;
+
+        return {
+          registeredWithdrawal: nextRegistered,
+          nonRegisteredWithdrawal: nextNonRegistered,
+          plan: evaluatePlan({
+            age,
+            yearOffset,
+            inputs,
+            benefits,
+            spendingNeed,
+            registeredAfterGrowth,
+            nonRegisteredAfterGrowth,
+            nonRegisteredAcb,
+            registeredWithdrawal: nextRegistered,
+            nonRegisteredWithdrawal: nextNonRegistered
+          })
+        };
+      };
+
+      const full = applyAddition(room);
+      if (full.plan.shortfall > 1) {
+        return full;
+      }
+
+      let low = 0;
+      let high = room;
+      let best = full;
+
+      for (let i = 0; i < 28; i += 1) {
+        const mid = (low + high) / 2;
+        const attempt = applyAddition(mid);
+
+        if (attempt.plan.shortfall <= 1) {
+          best = attempt;
+          high = mid;
+        } else {
+          low = mid;
+        }
+      }
+
+      return best;
+    }
+
+    function simulateStrategy(mode, inputs) {
+      let registered = inputs.registeredCapital;
+      let nonRegistered = inputs.nonRegisteredCapital;
+      let nonRegisteredAcb = nonRegistered * inputs.acbRatio;
+      let cumulativeTax = 0;
+      let cumulativeBenefits = 0;
+      let cumulativeRegisteredWithdrawals = 0;
+      let cumulativeNonRegisteredWithdrawals = 0;
+      let depletionAge = null;
+      let firstOasRecoveryAge = null;
+      const rows = [];
+
+      for (let age = START_AGE; age <= END_AGE; age += 1) {
+        const yearOffset = age - START_AGE;
+        const year = START_YEAR + yearOffset;
+        const spendingNeed = inputs.baseWithdrawal * Math.pow(1 + inputs.inflation, yearOffset);
+        const benefits = getBenefitsForAge(age, inputs.inflation);
+        const benefitsTotal = benefits.rrq + benefits.psv;
+        const registeredStart = registered;
+        const nonRegisteredStart = nonRegistered;
+        const registeredAfterGrowth = registeredStart * (1 + inputs.annualReturn);
+        const nonRegisteredAfterGrowth = nonRegisteredStart * (1 + inputs.annualReturn);
+        const minimumRrif = Math.min(registeredAfterGrowth, getRrifMinimum(age, registeredAfterGrowth));
+        let registeredWithdrawal = minimumRrif;
+        let nonRegisteredWithdrawal = 0;
+
+        if (mode === 'optimized') {
+          const oasThreshold = getOasThresholdForYear(yearOffset, inputs.inflation);
+          const portfolioNeedGross = Math.max(0, spendingNeed - benefitsTotal);
+          const registeredTarget = age >= 65
+            ? Math.min(portfolioNeedGross, Math.max(0, oasThreshold - 5000 - benefitsTotal))
+            : Math.min(portfolioNeedGross, QUEBEC_FIRST_BRACKET);
+          registeredWithdrawal = Math.min(registeredAfterGrowth, Math.max(minimumRrif, registeredTarget));
+        }
+
+        registeredWithdrawal = clamp(registeredWithdrawal, 0, registeredAfterGrowth);
+        nonRegisteredWithdrawal = clamp(nonRegisteredWithdrawal, 0, nonRegisteredAfterGrowth);
+
+        let plan = evaluatePlan({
+          age,
+          yearOffset,
+          inputs,
+          benefits,
+          spendingNeed,
+          registeredAfterGrowth,
+          nonRegisteredAfterGrowth,
+          nonRegisteredAcb,
+          registeredWithdrawal,
+          nonRegisteredWithdrawal
+        });
+
+        const sourceOrder = mode === 'registered_first'
+          ? ['registered', 'nonRegistered']
+          : ['nonRegistered', 'registered'];
+
+        for (const source of sourceOrder) {
+          if (plan.shortfall <= 1) break;
+
+          const room = source === 'registered'
+            ? registeredAfterGrowth - registeredWithdrawal
+            : nonRegisteredAfterGrowth - nonRegisteredWithdrawal;
+
+          const solved = solveAdditionalWithdrawal({
+            source,
+            room,
+            age,
+            yearOffset,
+            inputs,
+            benefits,
+            spendingNeed,
+            registeredAfterGrowth,
+            nonRegisteredAfterGrowth,
+            nonRegisteredAcb,
+            registeredWithdrawal,
+            nonRegisteredWithdrawal
+          });
+
+          registeredWithdrawal = clamp(solved.registeredWithdrawal, 0, registeredAfterGrowth);
+          nonRegisteredWithdrawal = clamp(solved.nonRegisteredWithdrawal, 0, nonRegisteredAfterGrowth);
+          plan = solved.plan;
+        }
+
+        if (plan.oasRecovery > 0 && firstOasRecoveryAge === null) {
+          firstOasRecoveryAge = age;
+        }
+
+        const acbSold = nonRegisteredAfterGrowth > 0
+          ? nonRegisteredAcb * (nonRegisteredWithdrawal / nonRegisteredAfterGrowth)
+          : 0;
+        let registeredEnd = Math.max(0, registeredAfterGrowth - registeredWithdrawal);
+        let nonRegisteredEnd = Math.max(0, nonRegisteredAfterGrowth - nonRegisteredWithdrawal + plan.reinvestment);
+        let nonRegisteredAcbEnd = Math.max(0, nonRegisteredAcb - acbSold + plan.reinvestment);
+        const beforeTaxFunding = registeredEnd + nonRegisteredEnd;
+        const taxFundingGap = Math.min(plan.taxFundingGap, beforeTaxFunding);
+
+        if (beforeTaxFunding > 0 && taxFundingGap > 0) {
+          const scale = Math.max(0, (beforeTaxFunding - taxFundingGap) / beforeTaxFunding);
+          registeredEnd *= scale;
+          nonRegisteredEnd *= scale;
+          nonRegisteredAcbEnd *= scale;
+        }
+
+        const afterTaxTotal = registeredEnd + nonRegisteredEnd;
+
+        if (afterTaxTotal <= 0 && depletionAge === null) {
+          depletionAge = age;
+        }
+
+        cumulativeTax += plan.totalTax;
+        cumulativeBenefits += benefitsTotal;
+        cumulativeRegisteredWithdrawals += registeredWithdrawal;
+        cumulativeNonRegisteredWithdrawals += nonRegisteredWithdrawal;
+
+        rows.push({
+          age,
+          year,
+          spendingNeed,
+          rrq: benefits.rrq,
+          psv: benefits.psv,
+          benefitsTotal,
+          registeredWithdrawal,
+          nonRegisteredWithdrawal,
+          taxableCapitalGain: plan.taxableCapitalGain,
+          taxableIncome: plan.taxableIncome,
+          incomeTax: plan.incomeTax,
+          oasRecovery: plan.oasRecovery,
+          totalTax: plan.totalTax,
+          reinvestment: plan.reinvestment,
+          shortfall: plan.shortfall,
+          registeredEnd,
+          nonRegisteredEnd,
+          totalNet: registeredEnd + nonRegisteredEnd,
+          minimumRrif,
+          oasThreshold: plan.oasThresholdForYear,
+          marginalRate: marginalRateForQuebec(plan.taxableIncome),
+          afterTaxCash: plan.afterTaxCash
+        });
+
+        registered = registeredEnd;
+        nonRegistered = nonRegisteredEnd;
+        nonRegisteredAcb = nonRegisteredAcbEnd;
+      }
+
+      const age90 = rows.find((row) => row.age === 90);
+      const age95 = rows.find((row) => row.age === 95);
+
+      return {
+        mode,
+        label: mode === 'nonreg_first'
+          ? 'Non enregistré d’abord'
+          : mode === 'registered_first'
+            ? 'Enregistré d’abord'
+            : 'Décaissement fiscal optimisé',
+        rows,
+        cumulativeTax,
+        cumulativeBenefits,
+        cumulativeRegisteredWithdrawals,
+        cumulativeNonRegisteredWithdrawals,
+        firstOasRecoveryAge,
+        depletionAge,
+        net90: age90 ? age90.totalNet : 0,
+        net95: age95 ? age95.totalNet : 0,
+        registered95: age95 ? age95.registeredEnd : 0,
+        nonRegistered95: age95 ? age95.nonRegisteredEnd : 0
+      };
+    }
+
+    function buildExplanation(best, alternatives, inputs) {
+      const firstBracketTarget = money(QUEBEC_FIRST_BRACKET);
+      const avgThreshold65 = money(getOasThresholdForYear(5, inputs.inflation));
+      const savingsVsWorst = best.net95 - Math.min(...alternatives.map((item) => item.net95));
+      const lowestTax = Math.min(...alternatives.map((item) => item.cumulativeTax));
+
+      const points = [];
+      points.push(`<h3>${best.label}</h3>`);
+      points.push(`<div class="muted">Cette recommandation est la meilleure parmi les scénarios comparés pour vos paramètres actuels.</div>`);
+      points.push('<ul>' + [
+        `La simulation part d'un besoin brut avant impôt, puis compare la part à financer par le portefeuille au plafond de la 1re tranche québécoise (environ ${firstBracketTarget}) et au seuil de récupération de la PSV.`,
+        `À partir de 65 ans, l'algorithme surveille aussi le seuil estimé de récupération de la PSV. Pour votre horizon, il tourne autour de ${avgThreshold65} à 65 ans après indexation simulée.`,
+        `Si le REER reste trop gros jusqu'à 72 ans, les minimums FERR peuvent pousser le revenu imposable vers le haut. La stratégie optimisée réduit cette pression plus tôt lorsque cela semble rentable.`,
+        `Avec vos chiffres, cette stratégie laisse ${money(best.net95)} à 95 ans, soit ${money(Math.max(0, savingsVsWorst))} de plus que la moins bonne stratégie simulée.`,
+        best.cumulativeTax <= lowestTax
+          ? `Elle est aussi la moins coûteuse en impôt cumulé parmi les scénarios comparés, à ${money(best.cumulativeTax)}.`
+          : `Elle paie ${money(best.cumulativeTax)} d'impôt cumulé. Même si ce n'est pas l'impôt minimal absolu, elle conserve plus de valeur nette finale grâce à une meilleure séquence de retraits.`
+      ].map((point) => `<li>${point}</li>`).join('') + '</ul>');
+
+      return points.join('');
+    }
+
+    function renderStrategyCards(results, bestMode) {
+      ids.strategyCards.innerHTML = results.map((result) => `
+        <div class="card strategy-card ${result.net95 <= 0 ? 'bad' : result.net95 < (result.net90 || 1) * 0.2 ? 'warn' : 'good'}">
+          <div class="badge ${result.mode === bestMode ? 'best' : ''}">${result.mode === bestMode ? 'Recommandée' : 'Comparée'}</div>
+          <div class="label">${result.label}</div>
+          <div class="value">${money(result.net95)}</div>
+          <div class="muted">Valeur nette estimée à 95 ans</div>
+          <div class="footer-note">
+            90 ans: <strong>${money(result.net90)}</strong><br />
+            Impôt cumulé: <strong>${money(result.cumulativeTax)}</strong><br />
+            1re récupération PSV: <strong>${result.firstOasRecoveryAge ? `${result.firstOasRecoveryAge} ans` : 'Aucune'}</strong><br />
+            Épuisement: <strong>${result.depletionAge ? `${result.depletionAge} ans` : 'Aucun'}</strong>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderChart(rows, startingTotal) {
+      const maxBalance = Math.max(startingTotal, ...rows.map((row) => row.totalNet), 1);
+      ids.chart.innerHTML = rows.map((row) => {
+        const width = Math.max(0, (row.totalNet / maxBalance) * 100);
+        return `
+          <div class="bar-row">
+            <div class="bar-label">${row.age} ans</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${width}%;background:${getChartColor(row.totalNet, startingTotal)}"></div>
+            </div>
+            <div class="bar-value">${money(row.totalNet)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderTable(rows) {
+      ids.cashflowBody.innerHTML = rows.map((row) => `
+        <tr>
+          <td>${row.age} ans</td>
+          <td>${row.year}</td>
+          <td>${money(row.spendingNeed)}</td>
+          <td>${money(row.rrq)}</td>
+          <td>${money(row.psv - row.oasRecovery)}</td>
+          <td>${money(row.registeredWithdrawal)}</td>
+          <td>${money(row.nonRegisteredWithdrawal)}</td>
+          <td>${money(row.taxableCapitalGain)}</td>
+          <td>${money(row.taxableIncome)}</td>
+          <td>${money(row.totalTax)}</td>
+          <td>${money(row.registeredEnd)}</td>
+          <td>${money(row.nonRegisteredEnd)}</td>
+          <td>${money(row.totalNet)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function simulateAll() {
+      const inputs = {
+        registeredCapital: Math.max(0, Number(ids.registeredCapital.value) || 0),
+        nonRegisteredCapital: Math.max(0, Number(ids.nonRegisteredCapital.value) || 0),
+        acbRatio: clamp((Number(ids.acbRatio.value) || 0) / 100, 0, 1),
+        annualReturn: Math.max(0, Number(ids.annualReturn.value) || 0) / 100,
+        inflation: Math.max(0, Number(ids.inflation.value) || 0) / 100,
+        baseWithdrawal: Number(ids.withdrawalSlider.value)
+      };
+
+      ids.withdrawalValue.textContent = money(inputs.baseWithdrawal);
+
+      const results = [
+        simulateStrategy('nonreg_first', inputs),
+        simulateStrategy('registered_first', inputs),
+        simulateStrategy('optimized', inputs)
+      ];
+
+      results.sort((a, b) => {
+        if (b.net95 !== a.net95) return b.net95 - a.net95;
+        return a.cumulativeTax - b.cumulativeTax;
+      });
+
+      const best = results[0];
+      const alternatives = results;
+      const startingTotal = inputs.registeredCapital + inputs.nonRegisteredCapital;
+
+      ids.bestStrategyHeadline.textContent = best.label;
+      ids.bestStrategySummary.textContent = `À 95 ans, ce scénario laisse ${money(best.net95)} de valeur nette estimée et ${money(best.cumulativeTax)} d'impôt cumulé.`;
+      ids.bestNet90.textContent = money(best.net90);
+      ids.bestNet95.textContent = money(best.net95);
+      ids.bestTaxes.textContent = money(best.cumulativeTax);
+      ids.bestDepletion.textContent = best.depletionAge ? `${best.depletionAge} ans` : 'Aucun';
+
+      renderStrategyCards(alternatives, best.mode);
+      ids.strategyExplanation.innerHTML = buildExplanation(best, alternatives, inputs);
+      renderChart(best.rows, startingTotal);
+      renderTable(best.rows);
+
+      document.querySelectorAll('.summary-grid .card').forEach((card, index) => {
+        card.classList.remove('good', 'warn', 'bad');
+        const value = index === 0 ? best.net90 : index === 1 ? best.net95 : null;
+        if (value !== null) {
+          if (value <= 0) card.classList.add('bad');
+          else if (value < startingTotal * 0.2) card.classList.add('warn');
+          else card.classList.add('good');
+        }
+      });
+    }
+
+    [
+      ids.registeredCapital,
+      ids.nonRegisteredCapital,
+      ids.acbRatio,
+      ids.annualReturn,
+      ids.inflation,
+      ids.withdrawalSlider
+    ].forEach((element) => element.addEventListener('input', simulateAll));
+
+    simulateAll();
+  </script>
+</body>
+</html>
