@@ -426,8 +426,8 @@
       <div class="slider-wrap">
         <div class="slider-header">
           <div>
-            <strong>Besoin net annuel après impôt</strong>
-            <div class="muted">Le simulateur grossit automatiquement les retraits pour couvrir ce besoin net, indexé selon l'inflation.</div>
+            <strong>Besoin annuel brut avant impôt</strong>
+            <div class="muted">Le besoin est indexé selon l'inflation. L'impôt est calculé séparément et réduit les soldes de fin d'année.</div>
           </div>
           <div id="withdrawalValue" class="slider-value">50 000 $</div>
         </div>
@@ -494,7 +494,7 @@
     <section class="panel">
       <h2>Entrées et sorties annuelles — stratégie retenue</h2>
       <p class="note">
-        Le tableau liste le besoin net annuel, les rentes publiques, les retraits depuis l'enregistré et le non enregistré,
+        Le tableau liste le besoin annuel brut, les rentes publiques, les retraits depuis l'enregistré et le non enregistré,
         le revenu imposable estimé, l'impôt estimé et les soldes de fin d'année.
       </p>
       <div class="table-wrap">
@@ -503,7 +503,7 @@
             <tr>
               <th>Âge</th>
               <th>Année</th>
-              <th>Besoin net</th>
+              <th>Besoin brut</th>
               <th>RRQ</th>
               <th>PSV</th>
               <th>Retrait enr.</th>
@@ -742,8 +742,10 @@
       const totalTax = incomeTax + oasRecovery;
       const grossCash = benefits.rrq + benefits.psv + registeredWithdrawal + nonRegisteredWithdrawal;
       const afterTaxCash = grossCash - totalTax;
-      const reinvestment = Math.max(0, afterTaxCash - spendingNeed);
-      const shortfall = Math.max(0, spendingNeed - afterTaxCash);
+      const leftoverAfterSpending = Math.max(0, grossCash - spendingNeed);
+      const reinvestment = Math.max(0, leftoverAfterSpending - totalTax);
+      const taxFundingGap = Math.max(0, totalTax - leftoverAfterSpending);
+      const shortfall = Math.max(0, spendingNeed - grossCash);
 
       return {
         gainRatio,
@@ -756,7 +758,9 @@
         totalTax,
         grossCash,
         afterTaxCash,
+        leftoverAfterSpending,
         reinvestment,
+        taxFundingGap,
         shortfall
       };
     }
@@ -872,12 +876,10 @@
 
         if (mode === 'optimized') {
           const oasThreshold = getOasThresholdForYear(yearOffset, inputs.inflation);
-          const firstBracketMarginalRate = marginalRateForQuebec(QUEBEC_FIRST_BRACKET);
-          const portfolioNeedNet = Math.max(0, spendingNeed - benefitsTotal);
-          const grossedUpPortfolioNeed = portfolioNeedNet / Math.max(0.2, 1 - firstBracketMarginalRate);
+          const portfolioNeedGross = Math.max(0, spendingNeed - benefitsTotal);
           const registeredTarget = age >= 65
-            ? Math.min(grossedUpPortfolioNeed, Math.max(0, oasThreshold - 5000 - benefitsTotal))
-            : Math.min(grossedUpPortfolioNeed, QUEBEC_FIRST_BRACKET);
+            ? Math.min(portfolioNeedGross, Math.max(0, oasThreshold - 5000 - benefitsTotal))
+            : Math.min(portfolioNeedGross, QUEBEC_FIRST_BRACKET);
           registeredWithdrawal = Math.min(registeredAfterGrowth, Math.max(minimumRrif, registeredTarget));
         }
 
@@ -935,10 +937,19 @@
         const acbSold = nonRegisteredAfterGrowth > 0
           ? nonRegisteredAcb * (nonRegisteredWithdrawal / nonRegisteredAfterGrowth)
           : 0;
-        const nonRegisteredAfterWithdrawal = Math.max(0, nonRegisteredAfterGrowth - nonRegisteredWithdrawal + plan.reinvestment);
-        const registeredEnd = Math.max(0, registeredAfterGrowth - registeredWithdrawal);
-        const nonRegisteredEnd = nonRegisteredAfterWithdrawal;
-        const nonRegisteredAcbEnd = Math.max(0, nonRegisteredAcb - acbSold + plan.reinvestment);
+        let registeredEnd = Math.max(0, registeredAfterGrowth - registeredWithdrawal);
+        let nonRegisteredEnd = Math.max(0, nonRegisteredAfterGrowth - nonRegisteredWithdrawal + plan.reinvestment);
+        let nonRegisteredAcbEnd = Math.max(0, nonRegisteredAcb - acbSold + plan.reinvestment);
+        const beforeTaxFunding = registeredEnd + nonRegisteredEnd;
+        const taxFundingGap = Math.min(plan.taxFundingGap, beforeTaxFunding);
+
+        if (beforeTaxFunding > 0 && taxFundingGap > 0) {
+          const scale = Math.max(0, (beforeTaxFunding - taxFundingGap) / beforeTaxFunding);
+          registeredEnd *= scale;
+          nonRegisteredEnd *= scale;
+          nonRegisteredAcbEnd *= scale;
+        }
+
         const afterTaxTotal = registeredEnd + nonRegisteredEnd;
 
         if (afterTaxTotal <= 0 && depletionAge === null) {
@@ -1014,7 +1025,7 @@
       points.push(`<h3>${best.label}</h3>`);
       points.push(`<div class="muted">Cette recommandation est la meilleure parmi les scénarios comparés pour vos paramètres actuels.</div>`);
       points.push('<ul>' + [
-        `La simulation part d'un besoin net, le grossit fiscalement, puis compare cette cible au plafond de la 1re tranche québécoise (environ ${firstBracketTarget}) et au seuil de récupération de la PSV.`,
+        `La simulation part d'un besoin brut avant impôt, puis compare la part à financer par le portefeuille au plafond de la 1re tranche québécoise (environ ${firstBracketTarget}) et au seuil de récupération de la PSV.`,
         `À partir de 65 ans, l'algorithme surveille aussi le seuil estimé de récupération de la PSV. Pour votre horizon, il tourne autour de ${avgThreshold65} à 65 ans après indexation simulée.`,
         `Si le REER reste trop gros jusqu'à 72 ans, les minimums FERR peuvent pousser le revenu imposable vers le haut. La stratégie optimisée réduit cette pression plus tôt lorsque cela semble rentable.`,
         `Avec vos chiffres, cette stratégie laisse ${money(best.net95)} à 95 ans, soit ${money(Math.max(0, savingsVsWorst))} de plus que la moins bonne stratégie simulée.`,
