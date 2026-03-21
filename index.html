@@ -426,8 +426,8 @@
       <div class="slider-wrap">
         <div class="slider-header">
           <div>
-            <strong>Besoin annuel de décaissement</strong>
-            <div class="muted">Le besoin est indexé chaque année selon l'inflation.</div>
+            <strong>Besoin net annuel après impôt</strong>
+            <div class="muted">Le simulateur grossit automatiquement les retraits pour couvrir ce besoin net, indexé selon l'inflation.</div>
           </div>
           <div id="withdrawalValue" class="slider-value">50 000 $</div>
         </div>
@@ -494,7 +494,7 @@
     <section class="panel">
       <h2>Entrées et sorties annuelles — stratégie retenue</h2>
       <p class="note">
-        Le tableau liste le besoin annuel, les rentes publiques, les retraits depuis l'enregistré et le non enregistré,
+        Le tableau liste le besoin net annuel, les rentes publiques, les retraits depuis l'enregistré et le non enregistré,
         le revenu imposable estimé, l'impôt estimé et les soldes de fin d'année.
       </p>
       <div class="table-wrap">
@@ -503,7 +503,7 @@
             <tr>
               <th>Âge</th>
               <th>Année</th>
-              <th>Besoin</th>
+              <th>Besoin net</th>
               <th>RRQ</th>
               <th>PSV</th>
               <th>Retrait enr.</th>
@@ -716,6 +716,62 @@
       return 'linear-gradient(90deg, #16a34a, #86efac)';
     }
 
+    function evaluatePlan({
+      age,
+      yearOffset,
+      inputs,
+      benefits,
+      spendingNeed,
+      registeredAfterGrowth,
+      nonRegisteredAfterGrowth,
+      nonRegisteredAcb,
+      registeredWithdrawal,
+      nonRegisteredWithdrawal
+    }) {
+      const gainRatio = nonRegisteredAfterGrowth > 0
+        ? clamp((nonRegisteredAfterGrowth - nonRegisteredAcb) / nonRegisteredAfterGrowth, 0, 1)
+        : 0;
+      const realizedGain = nonRegisteredWithdrawal * gainRatio;
+      const taxableCapitalGain = realizedGain * CAPITAL_GAINS_INCLUSION_RATE;
+      const taxableIncome = benefits.rrq + benefits.psv + registeredWithdrawal + taxableCapitalGain;
+      const incomeTax = combinedTaxForQuebec(taxableIncome);
+      const oasThresholdForYear = getOasThresholdForYear(yearOffset, inputs.inflation);
+      const oasRecovery = age >= 65
+        ? Math.min(benefits.psv, Math.max(0, taxableIncome - oasThresholdForYear) * OAS_RECOVERY_RATE)
+        : 0;
+      const totalTax = incomeTax + oasRecovery;
+      const grossCash = benefits.rrq + benefits.psv + registeredWithdrawal + nonRegisteredWithdrawal;
+      const afterTaxCash = grossCash - totalTax;
+      const reinvestment = Math.max(0, afterTaxCash - spendingNeed);
+      const shortfall = Math.max(0, spendingNeed - afterTaxCash);
+
+      return {
+        gainRatio,
+        realizedGain,
+        taxableCapitalGain,
+        taxableIncome,
+        incomeTax,
+        oasThresholdForYear,
+        oasRecovery,
+        totalTax,
+        grossCash,
+        afterTaxCash,
+        reinvestment,
+        shortfall
+      };
+    }
+
+    function grossUpRegistered(gap, taxableIncome) {
+      const effectiveKeepRate = Math.max(0.2, 1 - marginalRateForQuebec(taxableIncome));
+      return gap / effectiveKeepRate;
+    }
+
+    function grossUpNonRegistered(gap, taxableIncome, gainRatio) {
+      const taxDrag = marginalRateForQuebec(taxableIncome) * gainRatio * CAPITAL_GAINS_INCLUSION_RATE;
+      const effectiveKeepRate = Math.max(0.35, 1 - taxDrag);
+      return gap / effectiveKeepRate;
+    }
+
     function simulateStrategy(mode, inputs) {
       let registered = inputs.registeredCapital;
       let nonRegistered = inputs.nonRegisteredCapital;
@@ -777,55 +833,91 @@
         registeredWithdrawal = clamp(registeredWithdrawal, 0, registeredAfterGrowth);
         nonRegisteredWithdrawal = clamp(nonRegisteredWithdrawal, 0, nonRegisteredAfterGrowth);
 
-        const gainRatio = nonRegisteredAfterGrowth > 0
-          ? clamp((nonRegisteredAfterGrowth - nonRegisteredAcb) / nonRegisteredAfterGrowth, 0, 1)
-          : 0;
-        const realizedGain = nonRegisteredWithdrawal * gainRatio;
-        const taxableCapitalGain = realizedGain * CAPITAL_GAINS_INCLUSION_RATE;
-        const taxableIncome = benefitsTotal + registeredWithdrawal + taxableCapitalGain;
-        const incomeTax = combinedTaxForQuebec(taxableIncome);
-        const oasThresholdForYear = getOasThresholdForYear(yearOffset, inputs.inflation);
-        const oasRecovery = age >= 65
-          ? Math.min(benefits.psv, Math.max(0, taxableIncome - oasThresholdForYear) * OAS_RECOVERY_RATE)
-          : 0;
-        const totalTax = incomeTax + oasRecovery;
+        let plan = evaluatePlan({
+          age,
+          yearOffset,
+          inputs,
+          benefits,
+          spendingNeed,
+          registeredAfterGrowth,
+          nonRegisteredAfterGrowth,
+          nonRegisteredAcb,
+          registeredWithdrawal,
+          nonRegisteredWithdrawal
+        });
 
-        if (oasRecovery > 0 && firstOasRecoveryAge === null) {
-          firstOasRecoveryAge = age;
+        for (let i = 0; i < 24 && plan.shortfall > 1; i += 1) {
+          let progress = false;
+
+          if (mode === 'nonreg_first' || mode === 'optimized') {
+            const nonRegisteredRoom = nonRegisteredAfterGrowth - nonRegisteredWithdrawal;
+            if (nonRegisteredRoom > 0) {
+              const addFromNonRegistered = Math.min(
+                nonRegisteredRoom,
+                grossUpNonRegistered(plan.shortfall, plan.taxableIncome, plan.gainRatio)
+              );
+              nonRegisteredWithdrawal += addFromNonRegistered;
+              progress = addFromNonRegistered > 0;
+            }
+          }
+
+          if ((!progress || plan.shortfall > 1) && registeredWithdrawal < registeredAfterGrowth) {
+            const registeredRoom = registeredAfterGrowth - registeredWithdrawal;
+            const addFromRegistered = Math.min(
+              registeredRoom,
+              grossUpRegistered(plan.shortfall, plan.taxableIncome)
+            );
+            registeredWithdrawal += addFromRegistered;
+            progress = progress || addFromRegistered > 0;
+          }
+
+          if ((!progress || plan.shortfall > 1) && mode === 'registered_first' && nonRegisteredWithdrawal < nonRegisteredAfterGrowth) {
+            const nonRegisteredRoom = nonRegisteredAfterGrowth - nonRegisteredWithdrawal;
+            const addFromNonRegistered = Math.min(
+              nonRegisteredRoom,
+              grossUpNonRegistered(plan.shortfall, plan.taxableIncome, plan.gainRatio)
+            );
+            nonRegisteredWithdrawal += addFromNonRegistered;
+            progress = progress || addFromNonRegistered > 0;
+          }
+
+          registeredWithdrawal = clamp(registeredWithdrawal, 0, registeredAfterGrowth);
+          nonRegisteredWithdrawal = clamp(nonRegisteredWithdrawal, 0, nonRegisteredAfterGrowth);
+
+          plan = evaluatePlan({
+            age,
+            yearOffset,
+            inputs,
+            benefits,
+            spendingNeed,
+            registeredAfterGrowth,
+            nonRegisteredAfterGrowth,
+            nonRegisteredAcb,
+            registeredWithdrawal,
+            nonRegisteredWithdrawal
+          });
+
+          if (!progress) break;
         }
 
-        const grossCash = benefitsTotal + registeredWithdrawal + nonRegisteredWithdrawal;
-        const reinvestment = Math.max(0, grossCash - spendingNeed);
-        const shortfall = Math.max(0, spendingNeed - grossCash);
+        if (plan.oasRecovery > 0 && firstOasRecoveryAge === null) {
+          firstOasRecoveryAge = age;
+        }
 
         const acbSold = nonRegisteredAfterGrowth > 0
           ? nonRegisteredAcb * (nonRegisteredWithdrawal / nonRegisteredAfterGrowth)
           : 0;
-        const nonRegisteredAfterWithdrawal = nonRegisteredAfterGrowth - nonRegisteredWithdrawal + reinvestment;
-        let registeredEnd = registeredAfterGrowth - registeredWithdrawal;
-        let nonRegisteredEnd = nonRegisteredAfterWithdrawal;
-        let nonRegisteredAcbEnd = Math.max(0, nonRegisteredAcb - acbSold + reinvestment);
-
-        const beforeTaxTotal = Math.max(0, registeredEnd + nonRegisteredEnd - shortfall);
-        const taxPaid = Math.min(totalTax, beforeTaxTotal);
-        const afterTaxTotal = Math.max(0, beforeTaxTotal - taxPaid);
-
-        if (beforeTaxTotal > 0) {
-          const scale = afterTaxTotal / beforeTaxTotal;
-          registeredEnd *= scale;
-          nonRegisteredEnd *= scale;
-          nonRegisteredAcbEnd *= scale;
-        } else {
-          registeredEnd = 0;
-          nonRegisteredEnd = 0;
-          nonRegisteredAcbEnd = 0;
-        }
+        const nonRegisteredAfterWithdrawal = Math.max(0, nonRegisteredAfterGrowth - nonRegisteredWithdrawal + plan.reinvestment);
+        const registeredEnd = Math.max(0, registeredAfterGrowth - registeredWithdrawal);
+        const nonRegisteredEnd = nonRegisteredAfterWithdrawal;
+        const nonRegisteredAcbEnd = Math.max(0, nonRegisteredAcb - acbSold + plan.reinvestment);
+        const afterTaxTotal = registeredEnd + nonRegisteredEnd;
 
         if (afterTaxTotal <= 0 && depletionAge === null) {
           depletionAge = age;
         }
 
-        cumulativeTax += totalTax;
+        cumulativeTax += plan.totalTax;
         cumulativeBenefits += benefitsTotal;
         cumulativeRegisteredWithdrawals += registeredWithdrawal;
         cumulativeNonRegisteredWithdrawals += nonRegisteredWithdrawal;
@@ -839,19 +931,20 @@
           benefitsTotal,
           registeredWithdrawal,
           nonRegisteredWithdrawal,
-          taxableCapitalGain,
-          taxableIncome,
-          incomeTax,
-          oasRecovery,
-          totalTax,
-          reinvestment,
-          shortfall,
+          taxableCapitalGain: plan.taxableCapitalGain,
+          taxableIncome: plan.taxableIncome,
+          incomeTax: plan.incomeTax,
+          oasRecovery: plan.oasRecovery,
+          totalTax: plan.totalTax,
+          reinvestment: plan.reinvestment,
+          shortfall: plan.shortfall,
           registeredEnd,
           nonRegisteredEnd,
           totalNet: registeredEnd + nonRegisteredEnd,
           minimumRrif,
-          oasThreshold: oasThresholdForYear,
-          marginalRate: marginalRateForQuebec(taxableIncome)
+          oasThreshold: plan.oasThresholdForYear,
+          marginalRate: marginalRateForQuebec(plan.taxableIncome),
+          afterTaxCash: plan.afterTaxCash
         });
 
         registered = registeredEnd;
