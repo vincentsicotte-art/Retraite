@@ -761,15 +761,87 @@
       };
     }
 
-    function grossUpRegistered(gap, taxableIncome) {
-      const effectiveKeepRate = Math.max(0.2, 1 - marginalRateForQuebec(taxableIncome));
-      return gap / effectiveKeepRate;
-    }
+    function solveAdditionalWithdrawal({
+      source,
+      room,
+      age,
+      yearOffset,
+      inputs,
+      benefits,
+      spendingNeed,
+      registeredAfterGrowth,
+      nonRegisteredAfterGrowth,
+      nonRegisteredAcb,
+      registeredWithdrawal,
+      nonRegisteredWithdrawal
+    }) {
+      if (room <= 0) {
+        return {
+          registeredWithdrawal,
+          nonRegisteredWithdrawal,
+          plan: evaluatePlan({
+            age,
+            yearOffset,
+            inputs,
+            benefits,
+            spendingNeed,
+            registeredAfterGrowth,
+            nonRegisteredAfterGrowth,
+            nonRegisteredAcb,
+            registeredWithdrawal,
+            nonRegisteredWithdrawal
+          })
+        };
+      }
 
-    function grossUpNonRegistered(gap, taxableIncome, gainRatio) {
-      const taxDrag = marginalRateForQuebec(taxableIncome) * gainRatio * CAPITAL_GAINS_INCLUSION_RATE;
-      const effectiveKeepRate = Math.max(0.35, 1 - taxDrag);
-      return gap / effectiveKeepRate;
+      const applyAddition = (addition) => {
+        const nextRegistered = source === 'registered'
+          ? registeredWithdrawal + addition
+          : registeredWithdrawal;
+        const nextNonRegistered = source === 'nonRegistered'
+          ? nonRegisteredWithdrawal + addition
+          : nonRegisteredWithdrawal;
+
+        return {
+          registeredWithdrawal: nextRegistered,
+          nonRegisteredWithdrawal: nextNonRegistered,
+          plan: evaluatePlan({
+            age,
+            yearOffset,
+            inputs,
+            benefits,
+            spendingNeed,
+            registeredAfterGrowth,
+            nonRegisteredAfterGrowth,
+            nonRegisteredAcb,
+            registeredWithdrawal: nextRegistered,
+            nonRegisteredWithdrawal: nextNonRegistered
+          })
+        };
+      };
+
+      const full = applyAddition(room);
+      if (full.plan.shortfall > 1) {
+        return full;
+      }
+
+      let low = 0;
+      let high = room;
+      let best = full;
+
+      for (let i = 0; i < 28; i += 1) {
+        const mid = (low + high) / 2;
+        const attempt = applyAddition(mid);
+
+        if (attempt.plan.shortfall <= 1) {
+          best = attempt;
+          high = mid;
+        } else {
+          low = mid;
+        }
+      }
+
+      return best;
     }
 
     function simulateStrategy(mode, inputs) {
@@ -795,24 +867,8 @@
         const registeredAfterGrowth = registeredStart * (1 + inputs.annualReturn);
         const nonRegisteredAfterGrowth = nonRegisteredStart * (1 + inputs.annualReturn);
         const minimumRrif = Math.min(registeredAfterGrowth, getRrifMinimum(age, registeredAfterGrowth));
-        const cashNeedFromPortfolio = Math.max(0, spendingNeed - benefitsTotal);
-
-        let registeredWithdrawal = 0;
+        let registeredWithdrawal = minimumRrif;
         let nonRegisteredWithdrawal = 0;
-
-        if (mode === 'nonreg_first') {
-          registeredWithdrawal = minimumRrif;
-          const remainingNeed = Math.max(0, cashNeedFromPortfolio - registeredWithdrawal);
-          nonRegisteredWithdrawal = Math.min(nonRegisteredAfterGrowth, remainingNeed);
-          const finalRemainingNeed = Math.max(0, cashNeedFromPortfolio - registeredWithdrawal - nonRegisteredWithdrawal);
-          registeredWithdrawal += Math.min(registeredAfterGrowth - registeredWithdrawal, finalRemainingNeed);
-        }
-
-        if (mode === 'registered_first') {
-          registeredWithdrawal = Math.min(registeredAfterGrowth, Math.max(minimumRrif, cashNeedFromPortfolio));
-          const remainingNeed = Math.max(0, cashNeedFromPortfolio - registeredWithdrawal);
-          nonRegisteredWithdrawal = Math.min(nonRegisteredAfterGrowth, remainingNeed);
-        }
 
         if (mode === 'optimized') {
           const oasThreshold = getOasThresholdForYear(yearOffset, inputs.inflation);
@@ -821,13 +877,6 @@
             : QUEBEC_FIRST_BRACKET;
           const desiredRegistered = Math.max(0, taxableTarget - benefitsTotal);
           registeredWithdrawal = Math.min(registeredAfterGrowth, Math.max(minimumRrif, desiredRegistered));
-
-          if (registeredWithdrawal < cashNeedFromPortfolio) {
-            const remainingNeed = cashNeedFromPortfolio - registeredWithdrawal;
-            nonRegisteredWithdrawal = Math.min(nonRegisteredAfterGrowth, remainingNeed);
-            const stillMissing = Math.max(0, cashNeedFromPortfolio - registeredWithdrawal - nonRegisteredWithdrawal);
-            registeredWithdrawal += Math.min(registeredAfterGrowth - registeredWithdrawal, stillMissing);
-          }
         }
 
         registeredWithdrawal = clamp(registeredWithdrawal, 0, registeredAfterGrowth);
@@ -846,45 +895,20 @@
           nonRegisteredWithdrawal
         });
 
-        for (let i = 0; i < 24 && plan.shortfall > 1; i += 1) {
-          let progress = false;
+        const sourceOrder = mode === 'registered_first'
+          ? ['registered', 'nonRegistered']
+          : ['nonRegistered', 'registered'];
 
-          if (mode === 'nonreg_first' || mode === 'optimized') {
-            const nonRegisteredRoom = nonRegisteredAfterGrowth - nonRegisteredWithdrawal;
-            if (nonRegisteredRoom > 0) {
-              const addFromNonRegistered = Math.min(
-                nonRegisteredRoom,
-                grossUpNonRegistered(plan.shortfall, plan.taxableIncome, plan.gainRatio)
-              );
-              nonRegisteredWithdrawal += addFromNonRegistered;
-              progress = addFromNonRegistered > 0;
-            }
-          }
+        for (const source of sourceOrder) {
+          if (plan.shortfall <= 1) break;
 
-          if ((!progress || plan.shortfall > 1) && registeredWithdrawal < registeredAfterGrowth) {
-            const registeredRoom = registeredAfterGrowth - registeredWithdrawal;
-            const addFromRegistered = Math.min(
-              registeredRoom,
-              grossUpRegistered(plan.shortfall, plan.taxableIncome)
-            );
-            registeredWithdrawal += addFromRegistered;
-            progress = progress || addFromRegistered > 0;
-          }
+          const room = source === 'registered'
+            ? registeredAfterGrowth - registeredWithdrawal
+            : nonRegisteredAfterGrowth - nonRegisteredWithdrawal;
 
-          if ((!progress || plan.shortfall > 1) && mode === 'registered_first' && nonRegisteredWithdrawal < nonRegisteredAfterGrowth) {
-            const nonRegisteredRoom = nonRegisteredAfterGrowth - nonRegisteredWithdrawal;
-            const addFromNonRegistered = Math.min(
-              nonRegisteredRoom,
-              grossUpNonRegistered(plan.shortfall, plan.taxableIncome, plan.gainRatio)
-            );
-            nonRegisteredWithdrawal += addFromNonRegistered;
-            progress = progress || addFromNonRegistered > 0;
-          }
-
-          registeredWithdrawal = clamp(registeredWithdrawal, 0, registeredAfterGrowth);
-          nonRegisteredWithdrawal = clamp(nonRegisteredWithdrawal, 0, nonRegisteredAfterGrowth);
-
-          plan = evaluatePlan({
+          const solved = solveAdditionalWithdrawal({
+            source,
+            room,
             age,
             yearOffset,
             inputs,
@@ -897,7 +921,9 @@
             nonRegisteredWithdrawal
           });
 
-          if (!progress) break;
+          registeredWithdrawal = clamp(solved.registeredWithdrawal, 0, registeredAfterGrowth);
+          nonRegisteredWithdrawal = clamp(solved.nonRegisteredWithdrawal, 0, nonRegisteredAfterGrowth);
+          plan = solved.plan;
         }
 
         if (plan.oasRecovery > 0 && firstOasRecoveryAge === null) {
