@@ -426,7 +426,7 @@
       <p class="note">
         Le simulateur suppose un profil québécois, car votre tableau utilise la RRQ. Le capital non enregistré inclut
         un paramètre facultatif de coût de base fiscal afin d'estimer la portion en gain en capital lors des retraits.
-        L'âge de début des pensions gouvernementales décale la série fournie dans votre tableau, sans appliquer d'ajustement actuariel supplémentaire.
+        L'âge de début des pensions gouvernementales décale la série fournie dans votre tableau et applique automatiquement la bonification officielle liée au report de la RRQ et de la PSV.
       </p>
       <div class="controls-grid">
         <label>
@@ -574,6 +574,11 @@
     const OAS_THRESHOLD_2026 = 95323;
     const OAS_RECOVERY_RATE = 0.15;
     const CAPITAL_GAINS_INCLUSION_RATE = 0.5;
+    const RRQ_DELAY_BONUS_PER_MONTH = 0.007;
+    const OAS_DELAY_BONUS_PER_MONTH = 0.006;
+    const RRQ_NORMAL_START_AGE = 65;
+    const RRQ_MAX_BONUS_AGE = 72;
+    const OAS_MAX_BONUS_AGE = 70;
     const CUSTOM_WITHDRAWAL_AGES = [60, 61, 62, 63, 64];
 
     const federalBrackets2026 = [
@@ -792,10 +797,18 @@
       return series[series.length - 1] * Math.pow(1 + inflationRate, extraYears);
     }
 
+    function getDelayIncreaseFactor(startAge, maxBonusAge, monthlyRate) {
+      const eligibleStartAge = clamp(startAge, RRQ_NORMAL_START_AGE, maxBonusAge);
+      const delayedMonths = Math.max(0, Math.round((eligibleStartAge - RRQ_NORMAL_START_AGE) * 12));
+      return 1 + (delayedMonths * monthlyRate);
+    }
+
     function getBenefitsForAge(age, inflationRate, pensionStartAge) {
+      const rrqDelayFactor = getDelayIncreaseFactor(pensionStartAge, RRQ_MAX_BONUS_AGE, RRQ_DELAY_BONUS_PER_MONTH);
+      const oasDelayFactor = getDelayIncreaseFactor(pensionStartAge, OAS_MAX_BONUS_AGE, OAS_DELAY_BONUS_PER_MONTH);
       return {
-        rrq: getShiftedBenefit(rrqSeries, age - pensionStartAge, inflationRate),
-        psv: getShiftedBenefit(psvSeries, age - pensionStartAge, inflationRate)
+        rrq: getShiftedBenefit(rrqSeries, age - pensionStartAge, inflationRate) * rrqDelayFactor,
+        psv: getShiftedBenefit(psvSeries, age - pensionStartAge, inflationRate) * oasDelayFactor
       };
     }
 
@@ -1153,6 +1166,7 @@
       points.push('<ul>' + [
         `La simulation part d'un besoin brut avant impôt, puis compare la part à financer par le portefeuille au plafond de la 1re tranche québécoise (environ ${firstBracketTarget}) et au seuil de récupération de la PSV.`,
         `À partir de 65 ans, l'algorithme surveille aussi le seuil estimé de récupération de la PSV. Pour votre horizon, il tourne autour de ${avgThreshold65} à 65 ans après indexation simulée.`,
+        `Quand vous retardez l'âge de début RRQ + PSV, le simulateur applique automatiquement la bonification officielle: RRQ +0,7 % par mois après 65 ans et PSV +0,6 % par mois après 65 ans, jusqu'aux plafonds prévus.`,
         `Les retraits additionnels saisis entre 60 et 64 ans sont appliqués directement aux comptes visés, puis intégrés dans le revenu imposable et les soldes disponibles pour toutes les stratégies.`,
         `Si le REER reste trop gros jusqu'à 72 ans, les minimums FERR peuvent pousser le revenu imposable vers le haut. La stratégie optimisée réduit cette pression plus tôt lorsque cela semble rentable.`,
         `Avec vos chiffres, cette stratégie laisse ${money(best.net95)} à 95 ans, soit ${money(Math.max(0, savingsVsWorst))} de plus que la moins bonne stratégie simulée.`,
