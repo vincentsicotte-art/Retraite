@@ -124,7 +124,7 @@
     }
 
     .controls-grid {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(7, minmax(0, 1fr));
     }
 
     .summary-grid,
@@ -399,6 +399,7 @@
       <p class="note">
         Le simulateur suppose un profil québécois, car votre tableau utilise la RRQ. Le capital non enregistré inclut
         un paramètre facultatif de coût de base fiscal afin d'estimer la portion en gain en capital lors des retraits.
+        Les âges de début RRQ et PSV décalent la série fournie dans votre tableau, sans appliquer d'ajustement actuariel supplémentaire.
       </p>
       <div class="controls-grid">
         <label>
@@ -420,6 +421,14 @@
         <label>
           <span>Inflation annuelle (%)</span>
           <input id="inflation" type="number" min="0" max="10" step="0.1" value="2.5" />
+        </label>
+        <label>
+          <span>Âge de début RRQ</span>
+          <input id="rrqStartAge" type="number" min="60" max="72" step="1" value="65" />
+        </label>
+        <label>
+          <span>Âge de début PSV</span>
+          <input id="psvStartAge" type="number" min="65" max="70" step="1" value="65" />
         </label>
       </div>
 
@@ -579,6 +588,18 @@
       89: { rrq: 23034, psv: 19656 }
     };
 
+    const rrqSeries = Object.keys(rrqPsvByAge)
+      .map(Number)
+      .filter((age) => age >= 65)
+      .sort((a, b) => a - b)
+      .map((age) => rrqPsvByAge[age].rrq);
+
+    const psvSeries = Object.keys(rrqPsvByAge)
+      .map(Number)
+      .filter((age) => age >= 65)
+      .sort((a, b) => a - b)
+      .map((age) => rrqPsvByAge[age].psv);
+
     const rrifFactors = {
       71: 0.0528,
       72: 0.0540,
@@ -613,6 +634,8 @@
       acbRatio: document.getElementById('acbRatio'),
       annualReturn: document.getElementById('annualReturn'),
       inflation: document.getElementById('inflation'),
+      rrqStartAge: document.getElementById('rrqStartAge'),
+      psvStartAge: document.getElementById('psvStartAge'),
       withdrawalSlider: document.getElementById('withdrawalSlider'),
       withdrawalValue: document.getElementById('withdrawalValue'),
       bestStrategyHeadline: document.getElementById('bestStrategyHeadline'),
@@ -691,12 +714,17 @@
       return (fedRate * (1 - 0.165)) + qcRate;
     }
 
-    function getBenefitsForAge(age, inflationRate) {
-      if (rrqPsvByAge[age]) return rrqPsvByAge[age];
-      const factor = Math.pow(1 + inflationRate, age - 89);
+    function getShiftedBenefit(series, yearsFromStart, inflationRate) {
+      if (yearsFromStart < 0) return 0;
+      if (yearsFromStart < series.length) return series[yearsFromStart];
+      const extraYears = yearsFromStart - (series.length - 1);
+      return series[series.length - 1] * Math.pow(1 + inflationRate, extraYears);
+    }
+
+    function getBenefitsForAge(age, inflationRate, rrqStartAge, psvStartAge) {
       return {
-        rrq: rrqPsvByAge[89].rrq * factor,
-        psv: rrqPsvByAge[89].psv * factor
+        rrq: getShiftedBenefit(rrqSeries, age - rrqStartAge, inflationRate),
+        psv: getShiftedBenefit(psvSeries, age - psvStartAge, inflationRate)
       };
     }
 
@@ -864,7 +892,7 @@
         const yearOffset = age - START_AGE;
         const year = START_YEAR + yearOffset;
         const spendingNeed = inputs.baseWithdrawal * Math.pow(1 + inputs.inflation, yearOffset);
-        const benefits = getBenefitsForAge(age, inputs.inflation);
+        const benefits = getBenefitsForAge(age, inputs.inflation, inputs.rrqStartAge, inputs.psvStartAge);
         const benefitsTotal = benefits.rrq + benefits.psv;
         const registeredStart = registered;
         const nonRegisteredStart = nonRegistered;
@@ -1097,6 +1125,8 @@
         acbRatio: clamp((Number(ids.acbRatio.value) || 0) / 100, 0, 1),
         annualReturn: Math.max(0, Number(ids.annualReturn.value) || 0) / 100,
         inflation: Math.max(0, Number(ids.inflation.value) || 0) / 100,
+        rrqStartAge: clamp(Number(ids.rrqStartAge.value) || 65, 60, 72),
+        psvStartAge: clamp(Number(ids.psvStartAge.value) || 65, 65, 70),
         baseWithdrawal: Number(ids.withdrawalSlider.value)
       };
 
@@ -1146,6 +1176,8 @@
       ids.acbRatio,
       ids.annualReturn,
       ids.inflation,
+      ids.rrqStartAge,
+      ids.psvStartAge,
       ids.withdrawalSlider
     ].forEach((element) => element.addEventListener('input', simulateAll));
 
