@@ -167,6 +167,33 @@
       gap: 12px;
     }
 
+    .custom-withdrawals {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: #f7fafc;
+      display: grid;
+      gap: 12px;
+    }
+
+    .custom-withdrawals-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px 16px;
+    }
+
+    .custom-withdrawals-grid label {
+      display: grid;
+      gap: 6px;
+    }
+
+    .custom-withdrawals-grid small {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.35;
+    }
+
     .slider-header {
       display: flex;
       align-items: center;
@@ -442,6 +469,16 @@
           <span>70 000 $</span>
         </div>
       </div>
+
+      <div class="custom-withdrawals">
+        <div class="slider-header">
+          <div>
+            <strong>Retraits additionnels planifiés de 60 à 64 ans</strong>
+            <div class="muted">Entrez, pour chaque année, un montant à retirer du capital enregistré et/ou non enregistré. Ces retraits réduisent les soldes de l'année correspondante et ajustent automatiquement les impôts et montants disponibles.</div>
+          </div>
+        </div>
+        <div id="customWithdrawalGrid" class="custom-withdrawals-grid"></div>
+      </div>
     </section>
 
     <section class="panel">
@@ -499,7 +536,7 @@
     <section class="panel">
       <h2>Entrées et sorties annuelles — stratégie retenue</h2>
       <p class="note">
-        Le tableau liste le besoin annuel brut, les rentes publiques, les retraits depuis l'enregistré et le non enregistré,
+        Le tableau liste le besoin annuel brut, les rentes publiques, les retraits réguliers et retraits additionnels planifiés,
         le revenu imposable estimé, l'impôt estimé et les soldes de fin d'année.
       </p>
       <div class="table-wrap">
@@ -513,6 +550,8 @@
               <th>PSV</th>
               <th>Retrait enr.</th>
               <th>Retrait non enr.</th>
+              <th>Ajout planifié enr.</th>
+              <th>Ajout planifié non enr.</th>
               <th>Gain imposable</th>
               <th>Revenu imposable</th>
               <th>Impôt</th>
@@ -535,6 +574,7 @@
     const OAS_THRESHOLD_2026 = 95323;
     const OAS_RECOVERY_RATE = 0.15;
     const CAPITAL_GAINS_INCLUSION_RATE = 0.5;
+    const CUSTOM_WITHDRAWAL_AGES = [60, 61, 62, 63, 64];
 
     const federalBrackets2026 = [
       { upTo: 58523, rate: 0.14 },
@@ -632,6 +672,7 @@
       inflation: document.getElementById('inflation'),
       pensionStartAge: document.getElementById('pensionStartAge'),
       withdrawalSlider: document.getElementById('withdrawalSlider'),
+      customWithdrawalGrid: document.getElementById('customWithdrawalGrid'),
       withdrawalValue: document.getElementById('withdrawalValue'),
       bestStrategyHeadline: document.getElementById('bestStrategyHeadline'),
       bestStrategySummary: document.getElementById('bestStrategySummary'),
@@ -650,6 +691,41 @@
       currency: 'CAD',
       maximumFractionDigits: 0
     });
+
+    function buildCustomWithdrawalInputs() {
+      ids.customWithdrawalGrid.innerHTML = CUSTOM_WITHDRAWAL_AGES.map((age) => `
+        <label>
+          <span>${age} ans — capital enregistré ($)</span>
+          <input id="customRegistered${age}" type="number" min="0" step="1000" value="0" />
+          <small>Retrait additionnel imposable retiré du REER/FERR à ${age} ans.</small>
+        </label>
+        <label>
+          <span>${age} ans — capital non enregistré ($)</span>
+          <input id="customNonRegistered${age}" type="number" min="0" step="1000" value="0" />
+          <small>Retrait additionnel soustrait du compte non enregistré à ${age} ans.</small>
+        </label>
+      `).join('');
+
+      ids.customRegisteredWithdrawals = {};
+      ids.customNonRegisteredWithdrawals = {};
+
+      CUSTOM_WITHDRAWAL_AGES.forEach((age) => {
+        ids.customRegisteredWithdrawals[age] = document.getElementById(`customRegistered${age}`);
+        ids.customNonRegisteredWithdrawals[age] = document.getElementById(`customNonRegistered${age}`);
+      });
+    }
+
+    function getCustomWithdrawals() {
+      const registered = {};
+      const nonRegistered = {};
+
+      CUSTOM_WITHDRAWAL_AGES.forEach((age) => {
+        registered[age] = Math.max(0, Number(ids.customRegisteredWithdrawals?.[age]?.value) || 0);
+        nonRegistered[age] = Math.max(0, Number(ids.customNonRegisteredWithdrawals?.[age]?.value) || 0);
+      });
+
+      return { registered, nonRegistered };
+    }
 
     function money(value) {
       return currency.format(Math.round(value));
@@ -749,28 +825,35 @@
       nonRegisteredAfterGrowth,
       nonRegisteredAcb,
       registeredWithdrawal,
-      nonRegisteredWithdrawal
+      nonRegisteredWithdrawal,
+      customRegisteredWithdrawal = 0,
+      customNonRegisteredWithdrawal = 0
     }) {
+      const totalRegisteredWithdrawal = registeredWithdrawal + customRegisteredWithdrawal;
+      const totalNonRegisteredWithdrawal = nonRegisteredWithdrawal + customNonRegisteredWithdrawal;
       const gainRatio = nonRegisteredAfterGrowth > 0
         ? clamp((nonRegisteredAfterGrowth - nonRegisteredAcb) / nonRegisteredAfterGrowth, 0, 1)
         : 0;
-      const realizedGain = nonRegisteredWithdrawal * gainRatio;
+      const realizedGain = totalNonRegisteredWithdrawal * gainRatio;
       const taxableCapitalGain = realizedGain * CAPITAL_GAINS_INCLUSION_RATE;
-      const taxableIncome = benefits.rrq + benefits.psv + registeredWithdrawal + taxableCapitalGain;
+      const taxableIncome = benefits.rrq + benefits.psv + totalRegisteredWithdrawal + taxableCapitalGain;
       const incomeTax = combinedTaxForQuebec(taxableIncome);
       const oasThresholdForYear = getOasThresholdForYear(yearOffset, inputs.inflation);
       const oasRecovery = age >= 65
         ? Math.min(benefits.psv, Math.max(0, taxableIncome - oasThresholdForYear) * OAS_RECOVERY_RATE)
         : 0;
       const totalTax = incomeTax + oasRecovery;
-      const grossCash = benefits.rrq + benefits.psv + registeredWithdrawal + nonRegisteredWithdrawal;
-      const afterTaxCash = grossCash - totalTax;
-      const leftoverAfterSpending = Math.max(0, grossCash - spendingNeed);
+      const spendingCash = benefits.rrq + benefits.psv + registeredWithdrawal + nonRegisteredWithdrawal;
+      const portfolioCash = spendingCash + customRegisteredWithdrawal + customNonRegisteredWithdrawal;
+      const afterTaxCash = spendingCash - totalTax;
+      const leftoverAfterSpending = Math.max(0, spendingCash - spendingNeed);
       const reinvestment = Math.max(0, leftoverAfterSpending - totalTax);
       const taxFundingGap = Math.max(0, totalTax - leftoverAfterSpending);
-      const shortfall = Math.max(0, spendingNeed - grossCash);
+      const shortfall = Math.max(0, spendingNeed - spendingCash);
 
       return {
+        totalRegisteredWithdrawal,
+        totalNonRegisteredWithdrawal,
         gainRatio,
         realizedGain,
         taxableCapitalGain,
@@ -779,7 +862,8 @@
         oasThresholdForYear,
         oasRecovery,
         totalTax,
-        grossCash,
+        spendingCash,
+        portfolioCash,
         afterTaxCash,
         leftoverAfterSpending,
         reinvestment,
@@ -800,7 +884,9 @@
       nonRegisteredAfterGrowth,
       nonRegisteredAcb,
       registeredWithdrawal,
-      nonRegisteredWithdrawal
+      nonRegisteredWithdrawal,
+      customRegisteredWithdrawal = 0,
+      customNonRegisteredWithdrawal = 0
     }) {
       if (room <= 0) {
         return {
@@ -816,7 +902,9 @@
             nonRegisteredAfterGrowth,
             nonRegisteredAcb,
             registeredWithdrawal,
-            nonRegisteredWithdrawal
+            nonRegisteredWithdrawal,
+            customRegisteredWithdrawal,
+            customNonRegisteredWithdrawal
           })
         };
       }
@@ -842,7 +930,9 @@
             nonRegisteredAfterGrowth,
             nonRegisteredAcb,
             registeredWithdrawal: nextRegistered,
-            nonRegisteredWithdrawal: nextNonRegistered
+            nonRegisteredWithdrawal: nextNonRegistered,
+            customRegisteredWithdrawal,
+            customNonRegisteredWithdrawal
           })
         };
       };
@@ -893,8 +983,12 @@
         const nonRegisteredStart = nonRegistered;
         const registeredAfterGrowth = registeredStart * (1 + inputs.annualReturn);
         const nonRegisteredAfterGrowth = nonRegisteredStart * (1 + inputs.annualReturn);
+        const plannedRegisteredWithdrawal = clamp(inputs.customWithdrawals?.registered?.[age] || 0, 0, registeredAfterGrowth);
+        const plannedNonRegisteredWithdrawal = clamp(inputs.customWithdrawals?.nonRegistered?.[age] || 0, 0, nonRegisteredAfterGrowth);
+        const availableRegisteredRoom = Math.max(0, registeredAfterGrowth - plannedRegisteredWithdrawal);
+        const availableNonRegisteredRoom = Math.max(0, nonRegisteredAfterGrowth - plannedNonRegisteredWithdrawal);
         const minimumRrif = Math.min(registeredAfterGrowth, getRrifMinimum(age, registeredAfterGrowth));
-        let registeredWithdrawal = minimumRrif;
+        let registeredWithdrawal = Math.max(0, minimumRrif - plannedRegisteredWithdrawal);
         let nonRegisteredWithdrawal = 0;
 
         if (mode === 'optimized') {
@@ -903,11 +997,11 @@
           const registeredTarget = age >= 65
             ? Math.min(portfolioNeedGross, Math.max(0, oasThreshold - 5000 - benefitsTotal))
             : Math.min(portfolioNeedGross, QUEBEC_FIRST_BRACKET);
-          registeredWithdrawal = Math.min(registeredAfterGrowth, Math.max(minimumRrif, registeredTarget));
+          registeredWithdrawal = Math.max(0, Math.max(minimumRrif, registeredTarget) - plannedRegisteredWithdrawal);
         }
 
-        registeredWithdrawal = clamp(registeredWithdrawal, 0, registeredAfterGrowth);
-        nonRegisteredWithdrawal = clamp(nonRegisteredWithdrawal, 0, nonRegisteredAfterGrowth);
+        registeredWithdrawal = clamp(registeredWithdrawal, 0, availableRegisteredRoom);
+        nonRegisteredWithdrawal = clamp(nonRegisteredWithdrawal, 0, availableNonRegisteredRoom);
 
         let plan = evaluatePlan({
           age,
@@ -919,7 +1013,9 @@
           nonRegisteredAfterGrowth,
           nonRegisteredAcb,
           registeredWithdrawal,
-          nonRegisteredWithdrawal
+          nonRegisteredWithdrawal,
+          customRegisteredWithdrawal: plannedRegisteredWithdrawal,
+          customNonRegisteredWithdrawal: plannedNonRegisteredWithdrawal
         });
 
         const sourceOrder = mode === 'registered_first'
@@ -930,8 +1026,8 @@
           if (plan.shortfall <= 1) break;
 
           const room = source === 'registered'
-            ? registeredAfterGrowth - registeredWithdrawal
-            : nonRegisteredAfterGrowth - nonRegisteredWithdrawal;
+            ? availableRegisteredRoom - registeredWithdrawal
+            : availableNonRegisteredRoom - nonRegisteredWithdrawal;
 
           const solved = solveAdditionalWithdrawal({
             source,
@@ -945,11 +1041,13 @@
             nonRegisteredAfterGrowth,
             nonRegisteredAcb,
             registeredWithdrawal,
-            nonRegisteredWithdrawal
+            nonRegisteredWithdrawal,
+            customRegisteredWithdrawal: plannedRegisteredWithdrawal,
+            customNonRegisteredWithdrawal: plannedNonRegisteredWithdrawal
           });
 
-          registeredWithdrawal = clamp(solved.registeredWithdrawal, 0, registeredAfterGrowth);
-          nonRegisteredWithdrawal = clamp(solved.nonRegisteredWithdrawal, 0, nonRegisteredAfterGrowth);
+          registeredWithdrawal = clamp(solved.registeredWithdrawal, 0, availableRegisteredRoom);
+          nonRegisteredWithdrawal = clamp(solved.nonRegisteredWithdrawal, 0, availableNonRegisteredRoom);
           plan = solved.plan;
         }
 
@@ -957,11 +1055,12 @@
           firstOasRecoveryAge = age;
         }
 
+        const totalNonRegisteredWithdrawal = plan.totalNonRegisteredWithdrawal;
         const acbSold = nonRegisteredAfterGrowth > 0
-          ? nonRegisteredAcb * (nonRegisteredWithdrawal / nonRegisteredAfterGrowth)
+          ? nonRegisteredAcb * (totalNonRegisteredWithdrawal / nonRegisteredAfterGrowth)
           : 0;
-        let registeredEnd = Math.max(0, registeredAfterGrowth - registeredWithdrawal);
-        let nonRegisteredEnd = Math.max(0, nonRegisteredAfterGrowth - nonRegisteredWithdrawal + plan.reinvestment);
+        let registeredEnd = Math.max(0, registeredAfterGrowth - plan.totalRegisteredWithdrawal);
+        let nonRegisteredEnd = Math.max(0, nonRegisteredAfterGrowth - totalNonRegisteredWithdrawal + plan.reinvestment);
         let nonRegisteredAcbEnd = Math.max(0, nonRegisteredAcb - acbSold + plan.reinvestment);
         const beforeTaxFunding = registeredEnd + nonRegisteredEnd;
         const taxFundingGap = Math.min(plan.taxFundingGap, beforeTaxFunding);
@@ -981,8 +1080,8 @@
 
         cumulativeTax += plan.totalTax;
         cumulativeBenefits += benefitsTotal;
-        cumulativeRegisteredWithdrawals += registeredWithdrawal;
-        cumulativeNonRegisteredWithdrawals += nonRegisteredWithdrawal;
+        cumulativeRegisteredWithdrawals += plan.totalRegisteredWithdrawal;
+        cumulativeNonRegisteredWithdrawals += totalNonRegisteredWithdrawal;
 
         rows.push({
           age,
@@ -993,6 +1092,10 @@
           benefitsTotal,
           registeredWithdrawal,
           nonRegisteredWithdrawal,
+          plannedRegisteredWithdrawal,
+          plannedNonRegisteredWithdrawal,
+          totalRegisteredWithdrawal: plan.totalRegisteredWithdrawal,
+          totalNonRegisteredWithdrawal,
           taxableCapitalGain: plan.taxableCapitalGain,
           taxableIncome: plan.taxableIncome,
           incomeTax: plan.incomeTax,
@@ -1050,6 +1153,7 @@
       points.push('<ul>' + [
         `La simulation part d'un besoin brut avant impôt, puis compare la part à financer par le portefeuille au plafond de la 1re tranche québécoise (environ ${firstBracketTarget}) et au seuil de récupération de la PSV.`,
         `À partir de 65 ans, l'algorithme surveille aussi le seuil estimé de récupération de la PSV. Pour votre horizon, il tourne autour de ${avgThreshold65} à 65 ans après indexation simulée.`,
+        `Les retraits additionnels saisis entre 60 et 64 ans sont appliqués directement aux comptes visés, puis intégrés dans le revenu imposable et les soldes disponibles pour toutes les stratégies.`,
         `Si le REER reste trop gros jusqu'à 72 ans, les minimums FERR peuvent pousser le revenu imposable vers le haut. La stratégie optimisée réduit cette pression plus tôt lorsque cela semble rentable.`,
         `Avec vos chiffres, cette stratégie laisse ${money(best.net95)} à 95 ans, soit ${money(Math.max(0, savingsVsWorst))} de plus que la moins bonne stratégie simulée.`,
         best.cumulativeTax <= lowestTax
@@ -1103,6 +1207,8 @@
           <td>${money(row.psv - row.oasRecovery)}</td>
           <td>${money(row.registeredWithdrawal)}</td>
           <td>${money(row.nonRegisteredWithdrawal)}</td>
+          <td>${money(row.plannedRegisteredWithdrawal)}</td>
+          <td>${money(row.plannedNonRegisteredWithdrawal)}</td>
           <td>${money(row.taxableCapitalGain)}</td>
           <td>${money(row.taxableIncome)}</td>
           <td>${money(row.totalTax)}</td>
@@ -1121,7 +1227,8 @@
         annualReturn: Math.max(0, Number(ids.annualReturn.value) || 0) / 100,
         inflation: Math.max(0, Number(ids.inflation.value) || 0) / 100,
         pensionStartAge: clamp(Number(ids.pensionStartAge.value) || 65, 65, 70),
-        baseWithdrawal: Number(ids.withdrawalSlider.value)
+        baseWithdrawal: Number(ids.withdrawalSlider.value),
+        customWithdrawals: getCustomWithdrawals()
       };
 
       ids.withdrawalValue.textContent = money(inputs.baseWithdrawal);
@@ -1164,6 +1271,8 @@
       });
     }
 
+    buildCustomWithdrawalInputs();
+
     [
       ids.registeredCapital,
       ids.nonRegisteredCapital,
@@ -1171,7 +1280,9 @@
       ids.annualReturn,
       ids.inflation,
       ids.pensionStartAge,
-      ids.withdrawalSlider
+      ids.withdrawalSlider,
+      ...Object.values(ids.customRegisteredWithdrawals),
+      ...Object.values(ids.customNonRegisteredWithdrawals)
     ].forEach((element) => element.addEventListener('input', simulateAll));
 
     simulateAll();
