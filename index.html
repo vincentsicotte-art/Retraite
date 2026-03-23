@@ -537,7 +537,7 @@
       <h2>Entrées et sorties annuelles — stratégie retenue</h2>
       <p class="note">
         Le tableau liste le besoin annuel brut, les rentes publiques, les retraits réguliers et retraits additionnels planifiés,
-        le revenu imposable estimé, l'impôt estimé et les soldes de fin d'année.
+        le total REER/FERR imposable, le revenu imposable estimé, l'impôt estimé et les soldes de fin d'année.
       </p>
       <div class="table-wrap">
         <table>
@@ -548,9 +548,10 @@
               <th>Besoin brut</th>
               <th>RRQ</th>
               <th>PSV</th>
-              <th>Retrait enr.</th>
+              <th>Retrait enr. régulier</th>
               <th>Retrait non enr.</th>
               <th>Ajout planifié enr.</th>
+              <th>Total REER imposable</th>
               <th>Ajout planifié non enr.</th>
               <th>Gain imposable</th>
               <th>Revenu imposable</th>
@@ -1222,6 +1223,7 @@
           <td>${money(row.registeredWithdrawal)}</td>
           <td>${money(row.nonRegisteredWithdrawal)}</td>
           <td>${money(row.plannedRegisteredWithdrawal)}</td>
+          <td>${money(row.totalRegisteredWithdrawal)}</td>
           <td>${money(row.plannedNonRegisteredWithdrawal)}</td>
           <td>${money(row.taxableCapitalGain)}</td>
           <td>${money(row.taxableIncome)}</td>
